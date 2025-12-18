@@ -1,0 +1,50 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% CONFIGURATION - START
+
+% Multiple MATLAB paths separated by semicolon
+PATHS_NAME = /home/dir1/;/home/dir2
+
+
+% default list of floats to process
+FLOAT_LIST_FILE_NAME = ./list_arvor_arcticgo.txt
+% FLOAT_LIST_FILE_NAME = C:\Users\jprannou\_RNU\DecArgo_soft\lists\liste_snapshot_202202.txt
+% FLOAT_LIST_FILE_NAME = C:\Users\jprannou\_RNU\DecArgo_soft\lists\liste_snapshot_202202_prof_qc_8_9.txt
+
+% top directory of the NetCDF files
+DIR_INPUT_NC_FILES = /home/nicolas/Work/Data/ARGO/ARVOR-ICE-Pour-Camille/
+% DIR_INPUT_NC_FILES = D:\202202-ArgoData\coriolis\
+
+% directory of output files
+DIR_OUTPUT_FILES = ./
+
+% directory to store the log file
+DIR_LOG_FILE = ./log/
+
+% GEBCO bathymetric file
+GEBCO_FILE = ./GEBCO_2022.nc
+
+% max difference (in meters) between sea bottom and float parking drift to start
+DIFF_DEPTH_TO_START = 100000
+
+% tolerance (in meters) used to compare float pressure and GEBCO depth
+FLOAT_VS_BATHY_TOLERANCE = 10
+
+% tolerance (in meters) used to compare float pressure and GEBCO depth when the
+% float grounded
+FLOAT_VS_BATHY_TOLERANCE_FOR_GRD = 170
+
+% first range value (in kilometers)
+FIRST_RANGE = 20
+
+% last range value (in kilometers)
+LAST_RANGE = 250
+
+% range period (in kilometers)
+RANGE_PERIOD = 10
+
+% plot types
+PLOT_PNG = 1
+PLOT_PDF = 1
+
+% CONFIGURATION - END
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

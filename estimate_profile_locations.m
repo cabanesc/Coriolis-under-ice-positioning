@@ -25,53 +25,27 @@
 % ------------------------------------------------------------------------------
 function estimate_profile_locations(varargin)
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% CONFIGURATION - START
+% [cc 12/2025--->
+% load configuration parameters
 
-% default list of floats to process
-FLOAT_LIST_FILE_NAME = './list_arvor_arcticgo.txt';
-% FLOAT_LIST_FILE_NAME = 'C:\Users\jprannou\_RNU\DecArgo_soft\lists\liste_snapshot_202202.txt';
-% FLOAT_LIST_FILE_NAME = 'C:\Users\jprannou\_RNU\DecArgo_soft\lists\liste_snapshot_202202_prof_qc_8_9.txt';
+if exist('config.txt')
+    cfg = load_configuration('config.txt')
+else
+    copyfile('config_template.txt', 'config.txt');
+    error(['config.txt was missing and has been created from the template. ', ...
+           'Please edit it and rerun estimate_profile_locations.m']);
+end
 
-% top directory of the NetCDF files
-DIR_INPUT_NC_FILES = '/home/nicolas/Work/Data/ARGO/ARVOR-ICE-Pour-Camille/';
-% DIR_INPUT_NC_FILES = 'D:\202202-ArgoData\coriolis\';
-
-% directory of output files
-DIR_OUTPUT_FILES = './';
-
-% directory to store the log file
-DIR_LOG_FILE = './log/';
-
-% GEBCO bathymetric file
-GEBCO_FILE = './GEBCO_2022.nc';
-
-% max difference (in meters) between sea bottom and float parking drift to start
-DIFF_DEPTH_TO_START = 100000;
-
-% tolerance (in meters) used to compare float pressure and GEBCO depth
-FLOAT_VS_BATHY_TOLERANCE = 10;
-
-% tolerance (in meters) used to compare float pressure and GEBCO depth when the
-% float grounded
-FLOAT_VS_BATHY_TOLERANCE_FOR_GRD = 170;
-
-% first range value (in kilometers)
-FIRST_RANGE = 20;
-
-% last range value (in kilometers)
-LAST_RANGE = 250;
-
-% range period (in kilometers)
-RANGE_PERIOD = 10;
-
-% plot types
-PLOT_PNG = 1;
-PLOT_PDF = 1;
-
-% CONFIGURATION - END
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
+if isfield(cfg, 'PATH_NAME') && ~isempty(cfg.PATH_NAME)
+    paths = strsplit(cfg.PATH_NAME, ';');
+    for k = 1:length(paths)
+        addpath(genpath(paths{k}));
+        fprintf('Added path and subfolders: %s\n', paths{k});
+    end
+else
+    warning('PATH_NAME not defined in config.txt');
+end
+% ---- cc 12/2025]
 
 % global values initialization
 init_global_values;
@@ -88,59 +62,59 @@ global g_estProfLoc_plotPng;
 global g_estProfLoc_plotPdf;
 
 g_estProfLoc_version = '1.1';
-g_estProfLoc_diffDepthToStart = DIFF_DEPTH_TO_START;
-g_estProfLoc_floatVsbathyTolerance = FLOAT_VS_BATHY_TOLERANCE;
-g_estProfLoc_floatVsbathyToleranceForGrd = FLOAT_VS_BATHY_TOLERANCE_FOR_GRD;
-g_estProfLoc_firstRange = FIRST_RANGE;
-g_estProfLoc_lastRange = LAST_RANGE;
-g_estProfLoc_rangePeriod = RANGE_PERIOD;
-g_estProfLoc_plotPng = PLOT_PNG;
-g_estProfLoc_plotPdf = PLOT_PDF;
+g_estProfLoc_diffDepthToStart = cfg.DIFF_DEPTH_TO_START;
+g_estProfLoc_floatVsbathyTolerance = cfg.FLOAT_VS_BATHY_TOLERANCE;
+g_estProfLoc_floatVsbathyToleranceForGrd = cfg.FLOAT_VS_BATHY_TOLERANCE_FOR_GRD;
+g_estProfLoc_firstRange = cfg.FIRST_RANGE;
+g_estProfLoc_lastRange = cfg.LAST_RANGE;
+g_estProfLoc_rangePeriod = cfg.RANGE_PERIOD;
+g_estProfLoc_plotPng = cfg.PLOT_PNG;
+g_estProfLoc_plotPdf = cfg.PLOT_PDF;
 
 
 % check inputs
 if (nargin == 0)
-   if ~(exist(FLOAT_LIST_FILE_NAME, 'file') == 2)
-      fprintf('ERROR: File not found: %s\n', FLOAT_LIST_FILE_NAME);
-      return
-   end
+    if ~(exist(cfg.FLOAT_LIST_FILE_NAME, 'file') == 2)
+        fprintf('ERROR: File not found: %s\n', cfg.FLOAT_LIST_FILE_NAME);
+        return
+    end
 end
-if ~(exist(DIR_INPUT_NC_FILES, 'dir') == 7)
-   fprintf('ERROR: Directory not found: %s\n', DIR_INPUT_NC_FILES);
-   return
+if ~(exist(cfg.DIR_INPUT_NC_FILES, 'dir') == 7)
+    fprintf('ERROR: Directory not found: %s\n', cfg.DIR_INPUT_NC_FILES);
+    return
 end
-if ~(exist(GEBCO_FILE, 'file') == 2)
-   fprintf('ERROR: File not found: %s\n', GEBCO_FILE);
-   return
+if ~(exist(cfg.GEBCO_FILE, 'file') == 2)
+    fprintf('ERROR: File not found: %s\n', cfg.GEBCO_FILE);
+    return
 end
 
 % get floats to process
 if (nargin == 0)
-   % floats to process come from default list
-   fprintf('Floats from list: %s\n', FLOAT_LIST_FILE_NAME);
-   floatList = load(FLOAT_LIST_FILE_NAME);
+    % floats to process come from default list
+    fprintf('Floats from list: %s\n', cfg.FLOAT_LIST_FILE_NAME);
+    floatList = load(cfg.FLOAT_LIST_FILE_NAME);
 else
-   % floats to process come from input parameters
-   floatList = cell2mat(varargin);
+    % floats to process come from input parameters
+    floatList = cell2mat(varargin);
 end
 
 % create and start log file recording
 if (nargin == 0)
-   [~, name, ~] = fileparts(FLOAT_LIST_FILE_NAME);
-   name = ['_' name];
+    [~, name, ~] = fileparts(cfg.FLOAT_LIST_FILE_NAME);
+    name = ['_' name];
 else
-   name = sprintf('_%d', floatList);
+    name = sprintf('_%d', floatList);
 end
 
 % store the start time of the run
 currentTime = datestr(now, 'yyyymmddTHHMMSSZ');
 
 % create log directory
-if ~(exist(DIR_LOG_FILE, 'dir') == 7)
-   mkdir(DIR_LOG_FILE);
+if ~(exist(cfg.DIR_LOG_FILE, 'dir') == 7)
+    mkdir(cfg.DIR_LOG_FILE);
 end
 
-logFile = [DIR_LOG_FILE '/' 'estimate_profile_locations' name '_' currentTime '.log'];
+logFile = [cfg.DIR_LOG_FILE '/' 'estimate_profile_locations' name '_' currentTime '.log'];
 diary(logFile);
 tic;
 
@@ -148,19 +122,19 @@ tic;
 nbFloats = length(floatList);
 for idFloat = 1:nbFloats
 
-   floatNum = floatList(idFloat);
-   floatNumStr = num2str(floatNum);
-   fprintf('%03d/%03d %s\n', idFloat, nbFloats, floatNumStr);
+    floatNum = floatList(idFloat);
+    floatNumStr = num2str(floatNum);
+    fprintf('%03d/%03d %s\n', idFloat, nbFloats, floatNumStr);
 
-   % retrieve float data from NetCDF files
-   floatData = get_float_data(floatNum, [DIR_INPUT_NC_FILES '/' floatNumStr '/']);
-   if (isempty(floatData))
-      fprintf('No profile location to estimate\n');
-      continue
-   end
+    % retrieve float data from NetCDF files
+    floatData = get_float_data(floatNum, [cfg.DIR_INPUT_NC_FILES '/' floatNumStr '/']);
+    if (isempty(floatData))
+        fprintf('No profile location to estimate\n');
+        continue
+    end
 
-   % process float data
-   process_float_data(floatNum, floatData, [DIR_OUTPUT_FILES '/' floatNumStr '/'], GEBCO_FILE);
+    % process float data
+    process_float_data(floatNum, floatData, [cfg.DIR_OUTPUT_FILES '/' floatNumStr '/'], cfg.GEBCO_FILE);
 
 end
 
@@ -208,8 +182,8 @@ global g_decArgo_qcMissing;
 % define the sets of cycles to process
 pos = ones(size(a_floatData.positionQc));
 if (a_floatData.positionQc(end) == g_decArgo_qcInterpolated)
-   fprintf('WARNING: Float %d: inconsistent data (last profile location has QC = 8) - set to 1\n', a_floatNum);
-   a_floatData.positionQc(end) = g_decArgo_qcProbablyGood;
+    fprintf('WARNING: Float %d: inconsistent data (last profile location has QC = 8) - set to 1\n', a_floatNum);
+    a_floatData.positionQc(end) = g_decArgo_qcProbablyGood;
 end
 
 idF = find((a_floatData.positionQc == g_decArgo_qcInterpolated) | (a_floatData.positionQc == g_decArgo_qcMissing));
@@ -218,17 +192,17 @@ startIdList = find(diff(pos) == -1);
 stopIdList = find(diff(pos) == 1) + 1;
 
 if (isempty(startIdList))
-   return
+    return
 end
 
 if (length(startIdList) ~= length(stopIdList))
-   if (a_floatData.positionQc(end) == g_decArgo_qcMissing)
-      fprintf('ERROR: Float %d: inconsistent data (last profile location has QC = 9) - ignored\n', a_floatNum);
-      return
-   else
-      fprintf('ERROR: Float %d: unknown reason (TO BE CHECKED) - ignored\n', a_floatNum);
-      return
-   end
+    if (a_floatData.positionQc(end) == g_decArgo_qcMissing)
+        fprintf('ERROR: Float %d: inconsistent data (last profile location has QC = 9) - ignored\n', a_floatNum);
+        return
+    else
+        fprintf('ERROR: Float %d: unknown reason (TO BE CHECKED) - ignored\n', a_floatNum);
+        return
+    end
 end
 
 % TEMP - START / look for QC = 9 loc or grounded cycles
@@ -252,7 +226,7 @@ end
 
 % create output directory
 if ~(exist(a_outputDir, 'dir') == 7)
-   mkdir(a_outputDir);
+    mkdir(a_outputDir);
 end
 
 % interpolate anew profile locations (because some of them are missing
@@ -263,26 +237,26 @@ idFv = find(a_floatData.juldLocation == paramJuld.fillValue);
 a_floatData.juldLocation(idFv) = a_floatData.juld(idFv);
 
 for idS = 1:length(startIdList)
-   idStart = startIdList(idS);
-   idStop = stopIdList(idS);
+    idStart = startIdList(idS);
+    idStop = stopIdList(idS);
 
-   % interpolate the locations
-   [lonInter, latInter] = interpolate_between_2_locations(...
-      a_floatData.juldLocation(idStart), a_floatData.longitude(idStart), a_floatData.latitude(idStart), ...
-      a_floatData.juldLocation(idStop), a_floatData.longitude(idStop), a_floatData.latitude(idStop), ...
-      a_floatData.juldLocation(idStart+1:idStop-1)');
-   a_floatData.longitude(idStart+1:idStop-1) = lonInter';
-   a_floatData.latitude(idStart+1:idStop-1) = latInter';
-   a_floatData.positionQc(idStart+1:idStop-1) = g_decArgo_qcInterpolated;
+    % interpolate the locations
+    [lonInter, latInter] = interpolate_between_2_locations(...
+        a_floatData.juldLocation(idStart), a_floatData.longitude(idStart), a_floatData.latitude(idStart), ...
+        a_floatData.juldLocation(idStop), a_floatData.longitude(idStop), a_floatData.latitude(idStop), ...
+        a_floatData.juldLocation(idStart+1:idStop-1)');
+    a_floatData.longitude(idStart+1:idStop-1) = lonInter';
+    a_floatData.latitude(idStart+1:idStop-1) = latInter';
+    a_floatData.positionQc(idStart+1:idStop-1) = g_decArgo_qcInterpolated;
 end
 
 % compute speeds
 speed = nan(size(a_floatData.juldLocation));
 for idC = 2:length(a_floatData.juldLocation)
-   speed(idC) = ...
-      100*distance_lpo([a_floatData.latitude(idC-1) a_floatData.latitude(idC)], ...
-      [a_floatData.longitude(idC-1) a_floatData.longitude(idC)]) / ...
-      ((a_floatData.juldLocation(idC)-a_floatData.juldLocation(idC-1))*86400);
+    speed(idC) = ...
+        100*distance_lpo([a_floatData.latitude(idC-1) a_floatData.latitude(idC)], ...
+        [a_floatData.longitude(idC-1) a_floatData.longitude(idC)]) / ...
+        ((a_floatData.juldLocation(idC)-a_floatData.juldLocation(idC-1))*86400);
 end
 a_floatData.speed = speed;
 
@@ -292,46 +266,45 @@ a_floatData.gebcoDepth = get_gebco_depth(a_floatData.longitude, a_floatData.lati
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % process the sets of cycles
 for idS = 1:length(startIdList)
-   idStart = startIdList(idS);
-   idStop = stopIdList(idS);
+    idStart = startIdList(idS);
+    idStop = stopIdList(idS);
 
-   fprintf('   Processing one set of cycles: %d %03d-%03d\n', ...
-      a_floatNum, ...
-      a_floatData.cycleNumber(idStart), ...
-      a_floatData.cycleNumber(idStop));
+    fprintf('   Processing one set of cycles: %d %03d-%03d\n', ...
+        a_floatNum, ...
+        a_floatData.cycleNumber(idStart), ...
+        a_floatData.cycleNumber(idStop));
 
-   % be sure RPP is not to far from bottom depth
-   reducedFlag = 0;
-   if (idStart > 1)
-      for idC = idStart:idStop
-         if (~isnan(a_floatData.rpp(idC)) ...
-               && (a_floatData.gebcoDepth(idC) - a_floatData.rpp(idC) < g_estProfLoc_diffDepthToStart))
+    % be sure RPP is not to far from bottom depth
+    reducedFlag = 0;
+    if (idStart > 1)
+        for idC = idStart:idStop
+            if (~isnan(a_floatData.rpp(idC)) ...
+                    && (a_floatData.gebcoDepth(idC) - a_floatData.rpp(idC) < g_estProfLoc_diffDepthToStart))
+                break
+            end
+            idStart = idC;
+            reducedFlag = 1;
+        end
+    end
+    for idC = idStop:-1:idStart
+        if (~isnan(a_floatData.rpp(idC)) && (a_floatData.gebcoDepth(idC) - a_floatData.rpp(idC) < g_estProfLoc_diffDepthToStart))
             break
-         end
-         idStart = idC;
-         reducedFlag = 1;
-      end
-   end
-   for idC = idStop:-1:idStart
-      if (~isnan(a_floatData.rpp(idC)) ...
-            && (a_floatData.gebcoDepth(idC) - a_floatData.rpp(idC) < g_estProfLoc_diffDepthToStart))
-         break
-      end
-      idStop = idC;
-      reducedFlag = 1;
-   end
-   if (idStart == idStop)
-      fprintf('   Drifting depth too far from bathymetry - nothing done\n');
-      continue
-   elseif (reducedFlag == 1)
-      fprintf('   Set of cycles reduced to: %d %03d-%03d\n', ...
-         a_floatNum, ...
-         a_floatData.cycleNumber(idStart), ...
-         a_floatData.cycleNumber(idStop));
-   end
+        end
+        idStop = idC;
+        reducedFlag = 1;
+    end
+    if (idStart == idStop)
+        fprintf('   Drifting depth too far from bathymetry - nothing done\n');
+        continue
+    elseif (reducedFlag == 1)
+        fprintf('   Set of cycles reduced to: %d %03d-%03d\n', ...
+            a_floatNum, ...
+            a_floatData.cycleNumber(idStart), ...
+            a_floatData.cycleNumber(idStop));
+    end
 
-   % process the set of cycles
-   a_floatData = process_set_of_cycles(a_floatNum, a_floatData, idS, idStart, idStop, a_outputDir, a_gebcoFilePathName);
+    % process the set of cycles
+    a_floatData = process_set_of_cycles(a_floatNum, a_floatData, idS, idStart, idStop, a_outputDir, a_gebcoFilePathName);
 
 end
 
@@ -368,7 +341,7 @@ return
 %   03/01/2022 - RNU - creation
 % ------------------------------------------------------------------------------
 function [o_floatData] = process_set_of_cycles(a_floatNum, a_floatData, ...
-   a_setNum, a_idStart, a_idStop, a_outputDir, a_gebcoFilePathName)
+    a_setNum, a_idStart, a_idStop, a_outputDir, a_gebcoFilePathName)
 
 % output parameters initialization
 o_floatData = a_floatData;
@@ -398,14 +371,14 @@ gebcoDepth = a_floatData.gebcoDepth(a_idStart:a_idStop);
 depthConstraint = interp1q([juld(1); juld(end)], [gebcoDepth(1); gebcoDepth(end)], juld')';
 lastId = 1;
 for idC = 2:length(cycleNumber)-1
-   if (~isnan(profPresMax(idC)) && ((profPresMax(idC) > depthConstraint(idC)) || (grounded(idC) == 1)))
-      depthConstraint(idC) = profPresMax(idC);
-      depthConstraint(lastId:idC) = interp1q([juld(lastId); juld(idC)], [depthConstraint(lastId); depthConstraint(idC)], juld(lastId:idC)')';
-      lastId = idC;
-   end
+    if (~isnan(profPresMax(idC)) && ((profPresMax(idC) > depthConstraint(idC)) || (grounded(idC) == 1)))
+        depthConstraint(idC) = profPresMax(idC);
+        depthConstraint(lastId:idC) = interp1q([juld(lastId); juld(idC)], [depthConstraint(lastId); depthConstraint(idC)], juld(lastId:idC)')';
+        lastId = idC;
+    end
 end
 if (lastId ~= 1)
-   depthConstraint(lastId:end) = interp1q([juld(lastId); juld(end)], [depthConstraint(lastId); depthConstraint(end)], juld(lastId:end)')';
+    depthConstraint(lastId:end) = interp1q([juld(lastId); juld(end)], [depthConstraint(lastId); depthConstraint(end)], juld(lastId:end)')';
 end
 
 o_floatData.setNumber(a_idStart:a_idStop) = a_setNum;
@@ -417,15 +390,15 @@ warning off;
 
 screenSize = get(0, 'ScreenSize');
 figure('Name', 'Estimate profile locations', ...
-   'Position', [1 screenSize(4)*(1/3) screenSize(3) screenSize(4)*(2/3)-90], ...
-   'Color', 'w');
+    'Position', [1 screenSize(4)*(1/3) screenSize(3) screenSize(4)*(2/3)-90], ...
+    'Color', 'w');
 
 longitudeOri = longitude;
 latitudeOri = latitude;
 
 if (any(abs(diff(longitude)) > 180))
-   id = find(longitude < 0);
-   longitude(id) = longitude(id) + 360;
+    id = find(longitude < 0);
+    longitude(id) = longitude(id) + 360;
 end
 
 % angle of the normal to linear trajectory
@@ -438,7 +411,7 @@ den = x2 - x1 + eps;
 tetaRad = atan((y2-y1)/den) + pi*(x2<x1) - pi/2;
 tetaDeg = tetaRad*180/pi;
 if (tetaDeg < 0)
-   tetaDeg = tetaDeg + 360;
+    tetaDeg = tetaDeg + 360;
 end
 % fprintf('Teta: %.1f deg\n', tetaDeg);
 
@@ -453,352 +426,352 @@ resultB(1, 2) = latitude(end);
 % 2 loops: one for foreward, one for backward
 for idLoop = 1:2
 
-   if (idLoop == 2)
-      longitude = fliplr(longitude);
-      latitude = fliplr(latitude);
-      depthConstraint = fliplr(depthConstraint);
-   end
+    if (idLoop == 2)
+        longitude = fliplr(longitude);
+        latitude = fliplr(latitude);
+        depthConstraint = fliplr(depthConstraint);
+    end
 
-   % increase range until the path is found
-   for range = g_estProfLoc_firstRange:g_estProfLoc_rangePeriod:g_estProfLoc_lastRange
+    % increase range until the path is found
+    for range = g_estProfLoc_firstRange:g_estProfLoc_rangePeriod:g_estProfLoc_lastRange
 
-      if (idLoop == 1)
-         fprintf('   Trying forward with RANGE = %d', range);
-      else
-         fprintf('   Trying backward with RANGE = %d', range);
-      end
+        if (idLoop == 1)
+            fprintf('   Trying forward with RANGE = %d', range);
+        else
+            fprintf('   Trying backward with RANGE = %d', range);
+        end
 
-      % create the map of locations to check
-      nbCol = length(longitude);
-      nbLig = (nbCol-1)*2*range+1;
-      depthTabVal = nan(nbLig, nbCol);
-      diffTabVal = nan(nbLig, nbCol);
-      devTabFlag = ones(nbLig, nbCol);
-      lonTabAll = nan(nbLig, nbCol);
-      latTabAll = nan(nbLig, nbCol);
-      for idC = 1:length(longitude)-1
+        % create the map of locations to check
+        nbCol = length(longitude);
+        nbLig = (nbCol-1)*2*range+1;
+        depthTabVal = nan(nbLig, nbCol);
+        diffTabVal = nan(nbLig, nbCol);
+        devTabFlag = ones(nbLig, nbCol);
+        lonTabAll = nan(nbLig, nbCol);
+        latTabAll = nan(nbLig, nbCol);
+        for idC = 1:length(longitude)-1
 
-         % create the set of locations on the search segment
-         [lonTab, latTab] = get_loc_on_search_range(longitude([idC idC+1]), latitude([idC idC+1]), idC*range, tetaDeg);
-         if (any((lonTab < -180) | (lonTab >= 360) | ...
-               (latTab < -90) | (latTab > 90)))
-            idLonKo = find((lonTab < -180) | (lonTab >= 360));
-            lonTab(idLonKo) = [];
-            latTab(idLonKo) = [];
-            idLatKo = find((latTab < -90) | (latTab > 90));
-            lonTab(idLatKo) = [];
-            latTab(idLatKo) = [];
-         end
-
-         % retrieve location depth
-         depthVal = get_gebco_depth(lonTab, latTab, a_gebcoFilePathName);
-
-         depthFlag = ones(size(depthVal));
-         diffVal = depthVal - depthConstraint(idC+1);
-         if (grounded(idC+1) == 0)
-            idOk = find(diffVal >= -g_estProfLoc_floatVsbathyTolerance);
-         else
-            idOk = find((diffVal >= -g_estProfLoc_floatVsbathyToleranceForGrd) & ...
-               (diffVal <= g_estProfLoc_floatVsbathyToleranceForGrd));
-         end
-         depthFlag(idOk) = 0;
-
-         depthTabVal((nbCol-(idC+1))*range+(1:length(depthVal)), idC+1) = depthVal;
-         diffTabVal((nbCol-(idC+1))*range+(1:length(depthVal)), idC+1) = diffVal;
-         devTabFlag((nbCol-(idC+1))*range+(1:length(depthVal)), idC+1) = depthFlag;
-         lonTabAll((nbCol-(idC+1))*range+(1:length(depthVal)), idC+1) = lonTab;
-         latTabAll((nbCol-(idC+1))*range+(1:length(depthVal)), idC+1) = latTab;
-      end
-
-      % try to find a path
-      result = nan(length(longitude), 1);
-      curId = (nbCol-1)*range + 1;
-      idC = 1;
-      done = 1;
-      while (idC < length(longitude))
-         searchId = curId-range:curId+range;
-         idToCheck = find(devTabFlag(searchId, idC+1) == 0);
-         if (~isempty(idToCheck))
-            idToCheck = searchId(idToCheck);
-            [~, minId] = min(abs(diffTabVal(idToCheck, idC+1)));
-            curId = idToCheck(minId);
-            devTabFlag((devTabFlag(:, idC+1) == 2), idC+1) = 3;
-            devTabFlag(curId, idC+1) = 2;
-            result(idC+1) = curId;
-            idC = idC + 1;
-         else
-            if (idC <= 2)
-               done = 0;
-               break
+            % create the set of locations on the search segment
+            [lonTab, latTab] = get_loc_on_search_range(longitude([idC idC+1]), latitude([idC idC+1]), idC*range, tetaDeg);
+            if (any((lonTab < -180) | (lonTab >= 360) | ...
+                    (latTab < -90) | (latTab > 90)))
+                idLonKo = find((lonTab < -180) | (lonTab >= 360));
+                lonTab(idLonKo) = [];
+                latTab(idLonKo) = [];
+                idLatKo = find((latTab < -90) | (latTab > 90));
+                lonTab(idLatKo) = [];
+                latTab(idLatKo) = [];
             end
-            idC = idC - 1;
-            curId = result(idC);
-         end
-      end
 
-      if (idLoop == 1)
-         dir = 'Foreward';
-         dir2 = '1_foreward';
-      else
-         dir = 'Backward';
-         dir2 = '2_backward';
-      end
-      if (done == 1)
-         koOk = 'OK';
-      else
-         koOk = 'KO';
-      end
-      fprintf(' - %s\n', koOk);
-      label = sprintf('Float: %d - Cycles: %03d to %03d - %s - Range %d km - %s', ...
-         a_floatNum, ...
-         cycleNumber(1), ...
-         cycleNumber(end), ...
-         dir, ...
-         range, ...
-         koOk);
-      plotFileName = sprintf('%d_%03d-%03d_%s_range_%d_%s', ...
-         a_floatNum, ...
-         cycleNumber(1), ...
-         cycleNumber(end), ...
-         dir2, ...
-         range, ...
-         koOk);
+            % retrieve location depth
+            depthVal = get_gebco_depth(lonTab, latTab, a_gebcoFilePathName);
 
-      % display result of the try
-
-      % arrays to store legend information
-      legendPlots = [];
-      legendLabels = [];
-
-      idDone = find(devTabFlag == 2);
-      [lonMin, lonMax, latMin, latMax] = compute_geo_extrema( ...
-         [], [longitudeOri lonTabAll(idDone)'], [latitudeOri latTabAll(idDone)'], 0);
-      [elevC, lonC , latC] = get_gebco_elev_zone(lonMin, lonMax, latMin, latMax, a_gebcoFilePathName);
-
-      cla;
-
-      m_proj('mercator', 'latitudes', [latMin latMax], 'longitudes', [lonMin lonMax]);
-      m_grid('box', 'fancy', 'tickdir', 'out', 'linestyle', 'none');
-      hold on;
-
-      isobath = -unique(round(depthConstraint));
-      isobath = min(isobath):100:max(isobath);
-      if (length(isobath) == 1)
-         isobath = [isobath isobath];
-      end
-      [contourMatrix, contourHdl] = m_contour(lonC, latC, elevC, isobath, 'c');
-      if (~isempty(contourMatrix))
-         legendPlots = [legendPlots contourHdl];
-         legendLabels = [legendLabels {'depth constraint isobath'}];
-      end
-
-      m_line([longitude(1) longitude(end)], [latitude(1) latitude(end)], 'linestyle', '-', 'visible', 'on');
-
-      title(label, 'FontSize', 14);
-
-      plotHdl = m_plot(longitude(1), latitude(1), 'o', 'MarkerFaceColor', 'r', 'MarkerEdgeColor', 'r', 'Markersize', 4);
-      if (~isempty(plotHdl))
-         legendPlots = [legendPlots plotHdl];
-         legendLabels = [legendLabels {'starting location'}];
-      end
-
-      for idC = 1:length(longitude)-1
-         lonT = lonTabAll(:, idC+1);
-         latT = latTabAll(:, idC+1);
-
-         lonL = lonT(~isnan(lonT));
-         latL = latT(~isnan(latT));
-         m_line([lonL(1) lonL(end)], [latL(1) latL(end)], 'linestyle', '-', 'visible', 'on');
-
-         idNotChecked = find(devTabFlag(:, idC+1) == 0);
-         plotHdl = m_plot(lonT(idNotChecked), latT(idNotChecked), 'h', 'MarkerFaceColor', 'g', 'MarkerEdgeColor', 'g', 'Markersize',  4);
-         if (~isempty(plotHdl))
-            if (~any(strcmp(legendLabels, 'eligible locations')))
-               legendPlots = [legendPlots plotHdl];
-               legendLabels = [legendLabels {'eligible locations'}];
-            end
-         end
-
-         idFailed = find(devTabFlag(:, idC+1) == 3);
-         plotHdl = m_plot(lonT(idFailed), latT(idFailed), 'h', 'MarkerFaceColor', 'b', 'MarkerEdgeColor', 'b', 'Markersize',  4);
-         if (~isempty(plotHdl))
-            if (~any(strcmp(legendLabels, 'failed locations')))
-               legendPlots = [legendPlots plotHdl];
-               legendLabels = [legendLabels {'failed locations'}];
-            end
-         end
-
-         idDone = find(devTabFlag(:, idC+1) == 2);
-         plotHdl = m_plot(lonT(idDone), latT(idDone), 'h', 'MarkerFaceColor', 'r', 'MarkerEdgeColor', 'r', 'Markersize',  4);
-         if (~isempty(plotHdl))
-            if (~any(strcmp(legendLabels, 'final locations')))
-               legendPlots = [legendPlots plotHdl];
-               legendLabels = [legendLabels {'final locations'}];
-            end
-         end
-
-         if (done)
-            if (idLoop == 1)
-               resultF(idC+1, 1) = lonT(idDone);
-               resultF(idC+1, 2) = latT(idDone);
+            depthFlag = ones(size(depthVal));
+            diffVal = depthVal - depthConstraint(idC+1);
+            if (grounded(idC+1) == 0)
+                idOk = find(diffVal >= -g_estProfLoc_floatVsbathyTolerance);
             else
-               resultB(idC+1, 1) = lonT(idDone);
-               resultB(idC+1, 2) = latT(idDone);
+                idOk = find((diffVal >= -g_estProfLoc_floatVsbathyToleranceForGrd) & ...
+                    (diffVal <= g_estProfLoc_floatVsbathyToleranceForGrd));
             end
-         end
-      end
+            depthFlag(idOk) = 0;
 
-      % plot legend
-      legend(legendPlots, legendLabels, 'Location', 'NorthEastOutside', 'Tag', 'Legend');
+            depthTabVal((nbCol-(idC+1))*range+(1:length(depthVal)), idC+1) = depthVal;
+            diffTabVal((nbCol-(idC+1))*range+(1:length(depthVal)), idC+1) = diffVal;
+            devTabFlag((nbCol-(idC+1))*range+(1:length(depthVal)), idC+1) = depthFlag;
+            lonTabAll((nbCol-(idC+1))*range+(1:length(depthVal)), idC+1) = lonTab;
+            latTabAll((nbCol-(idC+1))*range+(1:length(depthVal)), idC+1) = latTab;
+        end
 
-      if (done || (range == g_estProfLoc_lastRange))
-         if (g_estProfLoc_plotPng)
-            print('-dpng', [a_outputDir '/' plotFileName '.png']);
-         end
-         if (g_estProfLoc_plotPdf)
-            orient landscape
-            print('-bestfit', '-dpdf', [a_outputDir '/' plotFileName '.pdf']);
-         end
-      end
+        % try to find a path
+        result = nan(length(longitude), 1);
+        curId = (nbCol-1)*range + 1;
+        idC = 1;
+        done = 1;
+        while (idC < length(longitude))
+            searchId = curId-range:curId+range;
+            idToCheck = find(devTabFlag(searchId, idC+1) == 0);
+            if (~isempty(idToCheck))
+                idToCheck = searchId(idToCheck);
+                [~, minId] = min(abs(diffTabVal(idToCheck, idC+1)));
+                curId = idToCheck(minId);
+                devTabFlag((devTabFlag(:, idC+1) == 2), idC+1) = 3;
+                devTabFlag(curId, idC+1) = 2;
+                result(idC+1) = curId;
+                idC = idC + 1;
+            else
+                if (idC <= 2)
+                    done = 0;
+                    break
+                end
+                idC = idC - 1;
+                curId = result(idC);
+            end
+        end
 
-      %       fprintf('Press any key ...');
-      %       pause
-      %       fprintf('\n');
+        if (idLoop == 1)
+            dir = 'Foreward';
+            dir2 = '1_foreward';
+        else
+            dir = 'Backward';
+            dir2 = '2_backward';
+        end
+        if (done == 1)
+            koOk = 'OK';
+        else
+            koOk = 'KO';
+        end
+        fprintf(' - %s\n', koOk);
+        label = sprintf('Float: %d - Cycles: %03d to %03d - %s - Range %d km - %s', ...
+            a_floatNum, ...
+            cycleNumber(1), ...
+            cycleNumber(end), ...
+            dir, ...
+            range, ...
+            koOk);
+        plotFileName = sprintf('%d_%03d-%03d_%s_range_%d_%s', ...
+            a_floatNum, ...
+            cycleNumber(1), ...
+            cycleNumber(end), ...
+            dir2, ...
+            range, ...
+            koOk);
 
-      if (done)
-         break
-      end
-   end
+        % display result of the try
+
+        % arrays to store legend information
+        legendPlots = [];
+        legendLabels = [];
+
+        idDone = find(devTabFlag == 2);
+        [lonMin, lonMax, latMin, latMax] = compute_geo_extrema( ...
+            [], [longitudeOri lonTabAll(idDone)'], [latitudeOri latTabAll(idDone)'], 0);
+        [elevC, lonC , latC] = get_gebco_elev_zone(lonMin, lonMax, latMin, latMax, a_gebcoFilePathName);
+
+        cla;
+
+        m_proj('mercator', 'latitudes', [latMin latMax], 'longitudes', [lonMin lonMax]);
+        m_grid('box', 'fancy', 'tickdir', 'out', 'linestyle', 'none');
+        hold on;
+
+        isobath = -unique(round(depthConstraint));
+        isobath = min(isobath):100:max(isobath);
+        if (length(isobath) == 1)
+            isobath = [isobath isobath];
+        end
+        [contourMatrix, contourHdl] = m_contour(lonC, latC, elevC, isobath, 'c');
+        if (~isempty(contourMatrix))
+            legendPlots = [legendPlots contourHdl];
+            legendLabels = [legendLabels {'depth constraint isobath'}];
+        end
+
+        m_line([longitude(1) longitude(end)], [latitude(1) latitude(end)], 'linestyle', '-', 'visible', 'on');
+
+        title(label, 'FontSize', 14);
+
+        plotHdl = m_plot(longitude(1), latitude(1), 'o', 'MarkerFaceColor', 'r', 'MarkerEdgeColor', 'r', 'Markersize', 4);
+        if (~isempty(plotHdl))
+            legendPlots = [legendPlots plotHdl];
+            legendLabels = [legendLabels {'starting location'}];
+        end
+
+        for idC = 1:length(longitude)-1
+            lonT = lonTabAll(:, idC+1);
+            latT = latTabAll(:, idC+1);
+
+            lonL = lonT(~isnan(lonT));
+            latL = latT(~isnan(latT));
+            m_line([lonL(1) lonL(end)], [latL(1) latL(end)], 'linestyle', '-', 'visible', 'on');
+
+            idNotChecked = find(devTabFlag(:, idC+1) == 0);
+            plotHdl = m_plot(lonT(idNotChecked), latT(idNotChecked), 'h', 'MarkerFaceColor', 'g', 'MarkerEdgeColor', 'g', 'Markersize',  4);
+            if (~isempty(plotHdl))
+                if (~any(strcmp(legendLabels, 'eligible locations')))
+                    legendPlots = [legendPlots plotHdl];
+                    legendLabels = [legendLabels {'eligible locations'}];
+                end
+            end
+
+            idFailed = find(devTabFlag(:, idC+1) == 3);
+            plotHdl = m_plot(lonT(idFailed), latT(idFailed), 'h', 'MarkerFaceColor', 'b', 'MarkerEdgeColor', 'b', 'Markersize',  4);
+            if (~isempty(plotHdl))
+                if (~any(strcmp(legendLabels, 'failed locations')))
+                    legendPlots = [legendPlots plotHdl];
+                    legendLabels = [legendLabels {'failed locations'}];
+                end
+            end
+
+            idDone = find(devTabFlag(:, idC+1) == 2);
+            plotHdl = m_plot(lonT(idDone), latT(idDone), 'h', 'MarkerFaceColor', 'r', 'MarkerEdgeColor', 'r', 'Markersize',  4);
+            if (~isempty(plotHdl))
+                if (~any(strcmp(legendLabels, 'final locations')))
+                    legendPlots = [legendPlots plotHdl];
+                    legendLabels = [legendLabels {'final locations'}];
+                end
+            end
+
+            if (done)
+                if (idLoop == 1)
+                    resultF(idC+1, 1) = lonT(idDone);
+                    resultF(idC+1, 2) = latT(idDone);
+                else
+                    resultB(idC+1, 1) = lonT(idDone);
+                    resultB(idC+1, 2) = latT(idDone);
+                end
+            end
+        end
+
+        % plot legend
+        legend(legendPlots, legendLabels, 'Location', 'NorthEastOutside', 'Tag', 'Legend');
+
+        if (done || (range == g_estProfLoc_lastRange))
+            if (g_estProfLoc_plotPng)
+                print('-dpng', [a_outputDir '/' plotFileName '.png']);
+            end
+            if (g_estProfLoc_plotPdf)
+                orient landscape
+                print('-bestfit', '-dpdf', [a_outputDir '/' plotFileName '.pdf']);
+            end
+        end
+
+        %       fprintf('Press any key ...');
+        %       pause
+        %       fprintf('\n');
+
+        if (done)
+            break
+        end
+    end
 end
 
 % plot final trajectory
 if (done)
 
-   label = sprintf('Float: %d - Cycles: %03d to %03d - Final trajectory\n', ...
-      a_floatNum, ...
-      cycleNumber(1), ...
-      cycleNumber(end));
+    label = sprintf('Float: %d - Cycles: %03d to %03d - Final trajectory\n', ...
+        a_floatNum, ...
+        cycleNumber(1), ...
+        cycleNumber(end));
 
-   plotFileName = sprintf('%d_%03d-%03d_3_final', ...
-      a_floatNum, ...
-      cycleNumber(1), ...
-      cycleNumber(end));
+    plotFileName = sprintf('%d_%03d-%03d_3_final', ...
+        a_floatNum, ...
+        cycleNumber(1), ...
+        cycleNumber(end));
 
-   % arrays to store legend information
-   legendPlots = [];
-   legendLabels = [];
+    % arrays to store legend information
+    legendPlots = [];
+    legendLabels = [];
 
-   [lonMin, lonMax, latMin, latMax] = compute_geo_extrema( ...
-      [], [longitudeOri resultF(:, 1)' resultB(:, 1)'], [latitudeOri resultF(:, 2)' resultB(:, 2)'], 0);
-   [elevC, lonC , latC] = get_gebco_elev_zone(lonMin, lonMax, latMin, latMax, a_gebcoFilePathName);
+    [lonMin, lonMax, latMin, latMax] = compute_geo_extrema( ...
+        [], [longitudeOri resultF(:, 1)' resultB(:, 1)'], [latitudeOri resultF(:, 2)' resultB(:, 2)'], 0);
+    [elevC, lonC , latC] = get_gebco_elev_zone(lonMin, lonMax, latMin, latMax, a_gebcoFilePathName);
 
-   cla;
+    cla;
 
-   m_proj('mercator', 'latitudes', [latMin latMax], 'longitudes', [lonMin lonMax]);
-   m_grid('box', 'fancy', 'tickdir', 'out', 'linestyle', 'none');
-   hold on;
+    m_proj('mercator', 'latitudes', [latMin latMax], 'longitudes', [lonMin lonMax]);
+    m_grid('box', 'fancy', 'tickdir', 'out', 'linestyle', 'none');
+    hold on;
 
-   isobath = -unique(round(depthConstraint));
-   isobath = min(isobath):100:max(isobath);
-   if (length(isobath) == 1)
-      isobath = [isobath isobath];
-   end
-   m_contour(lonC, latC, elevC, isobath, 'c');
+    isobath = -unique(round(depthConstraint));
+    isobath = min(isobath):100:max(isobath);
+    if (length(isobath) == 1)
+        isobath = [isobath isobath];
+    end
+    m_contour(lonC, latC, elevC, isobath, 'c');
 
-   m_line([longitude(1) longitude(end)], [latitude(1) latitude(end)], 'linestyle', '-', 'visible', 'on');
+    m_line([longitude(1) longitude(end)], [latitude(1) latitude(end)], 'linestyle', '-', 'visible', 'on');
 
-   title(label, 'FontSize', 14);
+    title(label, 'FontSize', 14);
 
-   for idC = 1:length(longitude)-1
-      plotHdl = m_plot(resultF(idC+1, 1), resultF(idC+1, 2), 'o', 'Markersize', 3, 'MarkerFaceColor', 'r', 'MarkerEdgeColor', 'r');
-      if (~isempty(plotHdl))
-         if (~any(strcmp(legendLabels, 'foreward locations')))
-            legendPlots = [legendPlots plotHdl];
-            legendLabels = [legendLabels {'foreward locations'}];
-         end
-      end
+    for idC = 1:length(longitude)-1
+        plotHdl = m_plot(resultF(idC+1, 1), resultF(idC+1, 2), 'o', 'Markersize', 3, 'MarkerFaceColor', 'r', 'MarkerEdgeColor', 'r');
+        if (~isempty(plotHdl))
+            if (~any(strcmp(legendLabels, 'foreward locations')))
+                legendPlots = [legendPlots plotHdl];
+                legendLabels = [legendLabels {'foreward locations'}];
+            end
+        end
 
-      plotHdl = m_plot(resultB(idC+1, 1), resultB(idC+1, 2), 'o', 'Markersize',  6, 'MarkerEdgeColor', 'r');
-      if (~isempty(plotHdl))
-         if (~any(strcmp(legendLabels, 'backward locations')))
-            legendPlots = [legendPlots plotHdl];
-            legendLabels = [legendLabels {'backward locations'}];
-         end
-      end
-   end
+        plotHdl = m_plot(resultB(idC+1, 1), resultB(idC+1, 2), 'o', 'Markersize',  6, 'MarkerEdgeColor', 'r');
+        if (~isempty(plotHdl))
+            if (~any(strcmp(legendLabels, 'backward locations')))
+                legendPlots = [legendPlots plotHdl];
+                legendLabels = [legendLabels {'backward locations'}];
+            end
+        end
+    end
 
-   trajLon = nan(length(longitude), 1);
-   trajLat = nan(length(longitude), 1);
-   nb1 = ceil(length(longitude)/2);
-   nb2 = nb1;
-   if (mod(length(longitude), 2) ~= 0)
-      nb2 = nb2 - 1;
-   end
-   trajLon(1:nb1) = resultF(1:nb1, 1);
-   trajLat(1:nb1) = resultF(1:nb1, 2);
-   trajLon(nb1+1:end) = flipud(resultB(1:nb2, 1));
-   trajLat(nb1+1:end) = flipud(resultB(1:nb2, 2));
-   lineHdl = m_line(trajLon, trajLat, 'linestyle', '-', 'color', 'r', 'visible', 'on');
-   if (~isempty(lineHdl))
-      legendPlots = [legendPlots lineHdl];
-      legendLabels = [legendLabels {'merged trajectory'}];
-   end
+    trajLon = nan(length(longitude), 1);
+    trajLat = nan(length(longitude), 1);
+    nb1 = ceil(length(longitude)/2);
+    nb2 = nb1;
+    if (mod(length(longitude), 2) ~= 0)
+        nb2 = nb2 - 1;
+    end
+    trajLon(1:nb1) = resultF(1:nb1, 1);
+    trajLat(1:nb1) = resultF(1:nb1, 2);
+    trajLon(nb1+1:end) = flipud(resultB(1:nb2, 1));
+    trajLat(nb1+1:end) = flipud(resultB(1:nb2, 2));
+    lineHdl = m_line(trajLon, trajLat, 'linestyle', '-', 'color', 'r', 'visible', 'on');
+    if (~isempty(lineHdl))
+        legendPlots = [legendPlots lineHdl];
+        legendLabels = [legendLabels {'merged trajectory'}];
+    end
 
-   % plot legend
-   legend(legendPlots, legendLabels, 'Location', 'NorthEastOutside', 'Tag', 'Legend');
+    % plot legend
+    legend(legendPlots, legendLabels, 'Location', 'NorthEastOutside', 'Tag', 'Legend');
 
-   if (g_estProfLoc_plotPng)
-      print('-dpng', [a_outputDir '/' plotFileName '.png']);
-   end
-   if (g_estProfLoc_plotPdf)
-      orient landscape
-      print('-bestfit', '-dpdf', [a_outputDir '/' plotFileName '.pdf']);
-   end
+    if (g_estProfLoc_plotPng)
+        print('-dpng', [a_outputDir '/' plotFileName '.png']);
+    end
+    if (g_estProfLoc_plotPdf)
+        orient landscape
+        print('-bestfit', '-dpdf', [a_outputDir '/' plotFileName '.pdf']);
+    end
 
-   %    fprintf('Press any key ...');
-   %    pause
-   %    fprintf('\n');
+    %    fprintf('Press any key ...');
+    %    pause
+    %    fprintf('\n');
 end
 
 % store output parameters
 
 if (done)
 
-   speed = nan(size(juld));
-   for idC = 2:length(juld)
-      speed(idC) = ...
-         100*distance_lpo([trajLat(idC-1) trajLat(idC)], [trajLon(idC-1) trajLon(idC)]) / ...
-         ((juld(idC)-juld(idC-1))*86400);
-   end
+    speed = nan(size(juld));
+    for idC = 2:length(juld)
+        speed(idC) = ...
+            100*distance_lpo([trajLat(idC-1) trajLat(idC)], [trajLon(idC-1) trajLon(idC)]) / ...
+            ((juld(idC)-juld(idC-1))*86400);
+    end
 
-   forwardLat = resultF(:, 2);
-   forwardLon = resultF(:, 1);
-   if (any(forwardLon > 180))
-      id = find(forwardLon > 180);
-      forwardLon(id) = forwardLon(id) - 360;
-   end
-   backwardLat = resultB(:, 2);
-   backwardLon = resultB(:, 1);
-   backwardLat = flipud(backwardLat);
-   backwardLon = flipud(backwardLon);
-   if (any(backwardLon > 180))
-      id = find(backwardLon > 180);
-      backwardLon(id) = backwardLon(id) - 360;
-   end
-   if (any(trajLon > 180))
-      id = find(trajLon > 180);
-      trajLon(id) = trajLon(id) - 360;
-   end
+    forwardLat = resultF(:, 2);
+    forwardLon = resultF(:, 1);
+    if (any(forwardLon > 180))
+        id = find(forwardLon > 180);
+        forwardLon(id) = forwardLon(id) - 360;
+    end
+    backwardLat = resultB(:, 2);
+    backwardLon = resultB(:, 1);
+    backwardLat = flipud(backwardLat);
+    backwardLon = flipud(backwardLon);
+    if (any(backwardLon > 180))
+        id = find(backwardLon > 180);
+        backwardLon(id) = backwardLon(id) - 360;
+    end
+    if (any(trajLon > 180))
+        id = find(trajLon > 180);
+        trajLon(id) = trajLon(id) - 360;
+    end
 
-   o_floatData.forwardLat(a_idStart:a_idStop) = forwardLat;
-   o_floatData.forwardLon(a_idStart:a_idStop) = forwardLon;
-   o_floatData.forwardGebcoDepth(a_idStart:a_idStop) = get_gebco_depth(forwardLon, forwardLat, a_gebcoFilePathName);
-   o_floatData.backwardLat(a_idStart:a_idStop) = backwardLat;
-   o_floatData.backwardLon(a_idStart:a_idStop) = backwardLon;
-   o_floatData.backwardGebcoDepth(a_idStart:a_idStop) = get_gebco_depth(backwardLon, backwardLat, a_gebcoFilePathName);
-   o_floatData.trajLat(a_idStart:a_idStop) = trajLat;
-   o_floatData.trajLon(a_idStart:a_idStop) = trajLon;
-   o_floatData.speedEst(a_idStart:a_idStop) = speed;
+    o_floatData.forwardLat(a_idStart:a_idStop) = forwardLat;
+    o_floatData.forwardLon(a_idStart:a_idStop) = forwardLon;
+    o_floatData.forwardGebcoDepth(a_idStart:a_idStop) = get_gebco_depth(forwardLon, forwardLat, a_gebcoFilePathName);
+    o_floatData.backwardLat(a_idStart:a_idStop) = backwardLat;
+    o_floatData.backwardLon(a_idStart:a_idStop) = backwardLon;
+    o_floatData.backwardGebcoDepth(a_idStart:a_idStop) = get_gebco_depth(backwardLon, backwardLat, a_gebcoFilePathName);
+    o_floatData.trajLat(a_idStart:a_idStop) = trajLat;
+    o_floatData.trajLon(a_idStart:a_idStop) = trajLon;
+    o_floatData.speedEst(a_idStart:a_idStop) = speed;
 end
 
 return
@@ -854,101 +827,101 @@ profDirName = [a_ncFileDir '/profiles/'];
 
 floatFiles = dir([profDirName '/' sprintf('*%d_*.nc', a_floatNum)]);
 for idFile = 1:length(floatFiles)
-   floatFileName = floatFiles(idFile).name;
-   if (floatFileName(1) == 'B')
-      continue
-   end
-   floatFilePathName = [profDirName '/' floatFileName];
+    floatFileName = floatFiles(idFile).name;
+    if (floatFileName(1) == 'B')
+        continue
+    end
+    floatFilePathName = [profDirName '/' floatFileName];
 
-   % retrieve data from file
-   wantedVars = [ ...
-      {'FORMAT_VERSION'} ...
-      {'CYCLE_NUMBER'} ...
-      {'DIRECTION'} ...
-      {'DATA_MODE'} ...
-      {'JULD'} ...
-      {'JULD_QC'} ...
-      {'JULD_LOCATION'} ...
-      {'LATITUDE'} ...
-      {'LONGITUDE'} ...
-      {'POSITION_QC'} ...
-      {'PRES'} ...
-      {'PRES_ADJUSTED'} ...
-      {'CONFIG_MISSION_NUMBER'} ...
-      ];
-   ncData = get_data_from_nc_file(floatFilePathName, wantedVars);
+    % retrieve data from file
+    wantedVars = [ ...
+        {'FORMAT_VERSION'} ...
+        {'CYCLE_NUMBER'} ...
+        {'DIRECTION'} ...
+        {'DATA_MODE'} ...
+        {'JULD'} ...
+        {'JULD_QC'} ...
+        {'JULD_LOCATION'} ...
+        {'LATITUDE'} ...
+        {'LONGITUDE'} ...
+        {'POSITION_QC'} ...
+        {'PRES'} ...
+        {'PRES_ADJUSTED'} ...
+        {'CONFIG_MISSION_NUMBER'} ...
+        ];
+    ncData = get_data_from_nc_file(floatFilePathName, wantedVars);
 
-   formatVersion = get_data_from_name('FORMAT_VERSION', ncData)';
-   formatVersion = strtrim(formatVersion);
-   cycleNumber = get_data_from_name('CYCLE_NUMBER', ncData);
-   direction = get_data_from_name('DIRECTION', ncData);
-   dataMode = get_data_from_name('DATA_MODE', ncData);
-   juld = get_data_from_name('JULD', ncData);
-   juldQc = get_data_from_name('JULD_QC', ncData);
-   juldLocation = get_data_from_name('JULD_LOCATION', ncData);
-   latitude = get_data_from_name('LATITUDE', ncData);
-   longitude = get_data_from_name('LONGITUDE', ncData);
-   positionQc = get_data_from_name('POSITION_QC', ncData);
-   pres = get_data_from_name('PRES', ncData);
-   presAdjusted = get_data_from_name('PRES_ADJUSTED', ncData);
-   configMissionNumber = get_data_from_name('CONFIG_MISSION_NUMBER', ncData);
+    formatVersion = get_data_from_name('FORMAT_VERSION', ncData)';
+    formatVersion = strtrim(formatVersion);
+    cycleNumber = get_data_from_name('CYCLE_NUMBER', ncData);
+    direction = get_data_from_name('DIRECTION', ncData);
+    dataMode = get_data_from_name('DATA_MODE', ncData);
+    juld = get_data_from_name('JULD', ncData);
+    juldQc = get_data_from_name('JULD_QC', ncData);
+    juldLocation = get_data_from_name('JULD_LOCATION', ncData);
+    latitude = get_data_from_name('LATITUDE', ncData);
+    longitude = get_data_from_name('LONGITUDE', ncData);
+    positionQc = get_data_from_name('POSITION_QC', ncData);
+    pres = get_data_from_name('PRES', ncData);
+    presAdjusted = get_data_from_name('PRES_ADJUSTED', ncData);
+    configMissionNumber = get_data_from_name('CONFIG_MISSION_NUMBER', ncData);
 
-   % check the file format version
-   if (~strcmp(formatVersion, '3.1'))
-      fprintf('ERROR: Input mono prof file (%s) is expected to be of 3.1 format version (but FORMAT_VERSION = %s) - ignored\n', ...
-         floatFileName, formatVersion);
-      continue
-   end
+    % check the file format version
+    if (~strcmp(formatVersion, '3.1'))
+        fprintf('ERROR: Input mono prof file (%s) is expected to be of 3.1 format version (but FORMAT_VERSION = %s) - ignored\n', ...
+            floatFileName, formatVersion);
+        continue
+    end
 
-   % check data consistency
-   if ((length(unique(cycleNumber)) > 1) || (length(unique(direction)) > 1) || ...
-         (length(unique(juld)) > 1) || (length(unique(juldQc)) > 1) || ...
-         (length(unique(juldLocation)) > 1) || (length(unique(latitude)) > 1) || ...
-         (length(unique(longitude)) > 1) || (length(unique(positionQc)) > 1) || ...
-         (length(unique(configMissionNumber)) > 1))
+    % check data consistency
+    if ((length(unique(cycleNumber)) > 1) || (length(unique(direction)) > 1) || ...
+            (length(unique(juld)) > 1) || (length(unique(juldQc)) > 1) || ...
+            (length(unique(juldLocation)) > 1) || (length(unique(latitude)) > 1) || ...
+            (length(unique(longitude)) > 1) || (length(unique(positionQc)) > 1) || ...
+            (length(unique(configMissionNumber)) > 1))
 
-      fprintf('ERROR: Inconsistent data in file: %s - ignored\n', floatFileName);
-      continue
-   end
+        fprintf('ERROR: Inconsistent data in file: %s - ignored\n', floatFileName);
+        continue
+    end
 
-   if (all(juld == paramJuld.fillValue))
-      fprintf('WARNING: Not dated profile in file: %s - ignored\n', floatFileName);
-      continue
-   end
+    if (all(juld == paramJuld.fillValue))
+        fprintf('WARNING: Not dated profile in file: %s - ignored\n', floatFileName);
+        continue
+    end
 
-   floatData.cycleNumber = [floatData.cycleNumber unique(cycleNumber)];
-   if (unique(direction) == 'D')
-      direct = 1;
-   else
-      direct = 2;
-   end
-   floatData.direction = [floatData.direction direct];
-   floatData.juld = [floatData.juld unique(juld)];
-   floatData.juldQc = [floatData.juldQc str2double(unique(juldQc))];
-   floatData.juldLocation = [floatData.juldLocation unique(juldLocation)];
-   floatData.latitude = [floatData.latitude unique(latitude)];
-   floatData.longitude = [floatData.longitude unique(longitude)];
-   floatData.positionQc = [floatData.positionQc str2double(unique(positionQc))];
-   floatData.configMissionNumber = [floatData.configMissionNumber unique(configMissionNumber)];
+    floatData.cycleNumber = [floatData.cycleNumber unique(cycleNumber)];
+    if (unique(direction) == 'D')
+        direct = 1;
+    else
+        direct = 2;
+    end
+    floatData.direction = [floatData.direction direct];
+    floatData.juld = [floatData.juld unique(juld)];
+    floatData.juldQc = [floatData.juldQc str2double(unique(juldQc))];
+    floatData.juldLocation = [floatData.juldLocation unique(juldLocation)];
+    floatData.latitude = [floatData.latitude unique(latitude)];
+    floatData.longitude = [floatData.longitude unique(longitude)];
+    floatData.positionQc = [floatData.positionQc str2double(unique(positionQc))];
+    floatData.configMissionNumber = [floatData.configMissionNumber unique(configMissionNumber)];
 
-   % compute profile max pressure
-   presMax = -1;
-   for idProf = 1:length(dataMode)
-      if (dataMode(idProf) == 'R')
-         presVal = pres(:, idProf);
-      else
-         presVal = presAdjusted(:, idProf);
-      end
-      presVal(presVal == paramPres.fillValue) = [];
-      if (max(presVal) > presMax)
-         presMax = max(presVal);
-      end
-   end
-   floatData.profPresMax = [floatData.profPresMax presMax];
+    % compute profile max pressure
+    presMax = -1;
+    for idProf = 1:length(dataMode)
+        if (dataMode(idProf) == 'R')
+            presVal = pres(:, idProf);
+        else
+            presVal = presAdjusted(:, idProf);
+        end
+        presVal(presVal == paramPres.fillValue) = [];
+        if (max(presVal) > presMax)
+            presMax = max(presVal);
+        end
+    end
+    floatData.profPresMax = [floatData.profPresMax presMax];
 end
 
 if ~(any((floatData.positionQc == g_decArgo_qcInterpolated) | (floatData.positionQc == g_decArgo_qcMissing)))
-   return
+    return
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -956,21 +929,21 @@ end
 
 floatFiles = dir([a_ncFileDir '/' sprintf('%d_meta.nc', a_floatNum)]);
 if (isempty(floatFiles))
-   fprintf('ERROR: Meta-data file not found - ignored\n');
-   return
+    fprintf('ERROR: Meta-data file not found - ignored\n');
+    return
 end
 
 floatFilePathName = [a_ncFileDir '/' floatFiles(1).name];
 
 % retrieve information from file
 wantedVars = [ ...
-   {'FORMAT_VERSION'} ...
-   {'LAUNCH_CONFIG_PARAMETER_NAME'} ...
-   {'LAUNCH_CONFIG_PARAMETER_VALUE'} ...
-   {'CONFIG_PARAMETER_NAME'} ...
-   {'CONFIG_PARAMETER_VALUE'} ...
-   {'CONFIG_MISSION_NUMBER'} ...
-   ];
+    {'FORMAT_VERSION'} ...
+    {'LAUNCH_CONFIG_PARAMETER_NAME'} ...
+    {'LAUNCH_CONFIG_PARAMETER_VALUE'} ...
+    {'CONFIG_PARAMETER_NAME'} ...
+    {'CONFIG_PARAMETER_VALUE'} ...
+    {'CONFIG_MISSION_NUMBER'} ...
+    ];
 ncData = get_data_from_nc_file(floatFilePathName, wantedVars);
 
 formatVersion = get_data_from_name('FORMAT_VERSION', ncData)';
@@ -983,33 +956,33 @@ configMissionNumberMeta = get_data_from_name('CONFIG_MISSION_NUMBER', ncData);
 
 % check the file format version
 if (~strcmp(formatVersion, '3.1'))
-   fprintf('ERROR: Input meta file (%s) is expected to be of 3.1 format version (but FORMAT_VERSION = %s) - ignored\n', ...
-      floatFiles(1).name, formatVersion);
-   return
+    fprintf('ERROR: Input meta file (%s) is expected to be of 3.1 format version (but FORMAT_VERSION = %s) - ignored\n', ...
+        floatFiles(1).name, formatVersion);
+    return
 end
 
 % retrieve the needed configuration parameters
 [~, nParam] = size(launchConfigParamName);
 launchConfigName = [];
 for idParam = 1:nParam
-   launchConfigName{end+1} = deblank(launchConfigParamName(:, idParam)');
+    launchConfigName{end+1} = deblank(launchConfigParamName(:, idParam)');
 end
 [~, nParam] = size(configParamName);
 configName = [];
 for idParam = 1:nParam
-   configName{end+1} = deblank(configParamName(:, idParam)');
+    configName{end+1} = deblank(configParamName(:, idParam)');
 end
 
 % process retrieved data
 parkP = -1;
 idF = find(strcmp('CONFIG_ParkPressure_dbar', launchConfigName(:)) == 1, 1);
 if (~isempty(idF) && (launchConfigValue(idF) ~= paramPres.fillValue))
-   parkP = launchConfigValue(idF);
+    parkP = launchConfigValue(idF);
 end
 parkPres = ones(size(configMissionNumberMeta))*parkP;
 idF = find(strcmp('CONFIG_ParkPressure_dbar', configName(:)) == 1, 1);
 if (~isempty(idF))
-   parkPres = configValue(idF, :);
+    parkPres = configValue(idF, :);
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1018,40 +991,40 @@ end
 floatFileName = '';
 floatFiles = dir([a_ncFileDir '/' sprintf('%d_*traj.nc', a_floatNum)]);
 for idFile = 1:length(floatFiles)
-   if (any(floatFiles(idFile).name == 'B'))
-      continue
-   end
-   floatFileName = floatFiles(idFile).name;
+    if (any(floatFiles(idFile).name == 'B'))
+        continue
+    end
+    floatFileName = floatFiles(idFile).name;
 end
 
 if (isempty(floatFileName))
-   fprintf('ERROR: Trajectory file not found - ignored\n');
-   return
+    fprintf('ERROR: Trajectory file not found - ignored\n');
+    return
 end
 
 floatFilePathName = [a_ncFileDir '/' floatFileName];
 
 % retrieve information from file
 wantedVars = [ ...
-   {'FORMAT_VERSION'} ...
-   {'TRAJECTORY_PARAMETERS'} ...
-   {'JULD'} ...
-   {'JULD_QC'} ...
-   {'LATITUDE'} ...
-   {'LONGITUDE'} ...
-   {'POSITION_ACCURACY'} ...
-   {'POSITION_QC'} ...
-   {'CYCLE_NUMBER'} ...
-   {'MEASUREMENT_CODE'} ...
-   {'PRES'} ...
-   {'PRES_ADJUSTED'} ...
-   {'TRAJECTORY_PARAMETER_DATA_MODE'} ...
-   {'GROUNDED'} ...
-   {'REPRESENTATIVE_PARK_PRESSURE'} ...
-   {'CONFIG_MISSION_NUMBER'} ...
-   {'CYCLE_NUMBER_INDEX'}, ...
-   {'DATA_MODE'} ...
-   ];
+    {'FORMAT_VERSION'} ...
+    {'TRAJECTORY_PARAMETERS'} ...
+    {'JULD'} ...
+    {'JULD_QC'} ...
+    {'LATITUDE'} ...
+    {'LONGITUDE'} ...
+    {'POSITION_ACCURACY'} ...
+    {'POSITION_QC'} ...
+    {'CYCLE_NUMBER'} ...
+    {'MEASUREMENT_CODE'} ...
+    {'PRES'} ...
+    {'PRES_ADJUSTED'} ...
+    {'TRAJECTORY_PARAMETER_DATA_MODE'} ...
+    {'GROUNDED'} ...
+    {'REPRESENTATIVE_PARK_PRESSURE'} ...
+    {'CONFIG_MISSION_NUMBER'} ...
+    {'CYCLE_NUMBER_INDEX'}, ...
+    {'DATA_MODE'} ...
+    ];
 ncData = get_data_from_nc_file(floatFilePathName, wantedVars);
 formatVersion = get_data_from_name('FORMAT_VERSION', ncData)';
 formatVersion = strtrim(formatVersion);
@@ -1075,31 +1048,31 @@ dataMode = get_data_from_name('DATA_MODE', ncData);
 
 % check the file format version
 if (~ismember(formatVersion, [{'3.1'} {'3.2'}]))
-   fprintf('ERROR: Input trajectory file (%s) is expected to be of 3.1 format version (but FORMAT_VERSION = %s)\n', ...
-      floatFileName, formatVersion);
-   return
+    fprintf('ERROR: Input trajectory file (%s) is expected to be of 3.1 format version (but FORMAT_VERSION = %s)\n', ...
+        floatFileName, formatVersion);
+    return
 end
 
 % add cycle #0 location if any or launch location otherwise
 idLoc0 = find((cycleNumber == 0) & ...
-   (latitude ~= paramLat.fillValue) & ...
-   (longitude ~= paramLon.fillValue) & ...
-   (positionAccuracy ~= 'I') & ...
-   ((positionQc == g_decArgo_qcStrGood) | (positionQc == g_decArgo_qcStrProbablyGood)));
+    (latitude ~= paramLat.fillValue) & ...
+    (longitude ~= paramLon.fillValue) & ...
+    (positionAccuracy ~= 'I') & ...
+    ((positionQc == g_decArgo_qcStrGood) | (positionQc == g_decArgo_qcStrProbablyGood)));
 if (~isempty(idLoc0))
-   [~, idMax] = max(juld(idLoc0));
-   juld0 = juld(idLoc0(idMax));
-   juldQc0 = juldQc(idLoc0(idMax));
-   longitude0 = longitude(idLoc0(idMax));
-   latitude0 = latitude(idLoc0(idMax));
-   positionQc0 = positionQc(idLoc0(idMax));
+    [~, idMax] = max(juld(idLoc0));
+    juld0 = juld(idLoc0(idMax));
+    juldQc0 = juldQc(idLoc0(idMax));
+    longitude0 = longitude(idLoc0(idMax));
+    latitude0 = latitude(idLoc0(idMax));
+    positionQc0 = positionQc(idLoc0(idMax));
 else
-   idLoc0 = find(cycleNumber == -1);
-   juld0 = juld(idLoc0);
-   juldQc0 = juldQc(idLoc0);
-   longitude0 = longitude(idLoc0);
-   latitude0 = latitude(idLoc0);
-   positionQc0 = positionQc(idLoc0);
+    idLoc0 = find(cycleNumber == -1);
+    juld0 = juld(idLoc0);
+    juldQc0 = juldQc(idLoc0);
+    longitude0 = longitude(idLoc0);
+    latitude0 = latitude(idLoc0);
+    positionQc0 = positionQc(idLoc0);
 end
 
 floatData.cycleNumber = [0 floatData.cycleNumber];
@@ -1131,75 +1104,75 @@ floatData.trajLon = nan(size(floatData.cycleNumber));
 floatData.speedEst = nan(size(floatData.cycleNumber));
 
 if (strcmp(formatVersion, '3.2') && any(grounded == 'Y'))
-   for idP = 1:size(trajParam, 2)
-      paramName = strtrim(trajParam(:, idP)');
-      if (strcmp(paramName, 'PRES'))
-         presParamId = idP;
-         break
-      end
-   end
+    for idP = 1:size(trajParam, 2)
+        paramName = strtrim(trajParam(:, idP)');
+        if (strcmp(paramName, 'PRES'))
+            presParamId = idP;
+            break
+        end
+    end
 end
 
 % get RPP (Representative Parking Pressure) and GROUNDED (flag and pressure if
 % any)
 cycleNumberList = unique(floatData.cycleNumber);
 for idCy = 1:length(cycleNumberList)
-   cyNum = cycleNumberList(idCy);
-   if (cyNum == 0)
-      continue
-   end
-   idForCy = find(floatData.cycleNumber == cyNum);
+    cyNum = cycleNumberList(idCy);
+    if (cyNum == 0)
+        continue
+    end
+    idForCy = find(floatData.cycleNumber == cyNum);
 
-   rppVal = rpp(cycleNumberIndex == cyNum);
-   if (isempty(rppVal))
-      floatData.rpp(idForCy) = nan;
-   elseif (rppVal ~= paramPres.fillValue)
-      floatData.rpp(idForCy) = rppVal;
-   else
-      rppVal = parkPres(configMissionNumberMeta == configMissionNumber(cycleNumberIndex == cyNum));
-      floatData.rpp(idForCy) = rppVal;
-   end
+    rppVal = rpp(cycleNumberIndex == cyNum);
+    if (isempty(rppVal))
+        floatData.rpp(idForCy) = nan;
+    elseif (rppVal ~= paramPres.fillValue)
+        floatData.rpp(idForCy) = rppVal;
+    else
+        rppVal = parkPres(configMissionNumberMeta == configMissionNumber(cycleNumberIndex == cyNum));
+        floatData.rpp(idForCy) = rppVal;
+    end
 
-   groundedFlag = grounded(cycleNumberIndex == cyNum);
-   if (groundedFlag == 'Y')
-      floatData.grounded(idForCy) = 1;
+    groundedFlag = grounded(cycleNumberIndex == cyNum);
+    if (groundedFlag == 'Y')
+        floatData.grounded(idForCy) = 1;
 
-      idGrd = find((cycleNumber == cyNum) & (measCode == g_MC_Grounded));
-      if (~isempty(idGrd))
-         if (strcmp(formatVersion, '3.1'))
-            if (dataMode(cycleNumberIndex == cyNum) == 'R')
-               presVal = pres;
-            else
-               presVal = presAdjusted;
+        idGrd = find((cycleNumber == cyNum) & (measCode == g_MC_Grounded));
+        if (~isempty(idGrd))
+            if (strcmp(formatVersion, '3.1'))
+                if (dataMode(cycleNumberIndex == cyNum) == 'R')
+                    presVal = pres;
+                else
+                    presVal = presAdjusted;
+                end
+                presGrd = presVal(idGrd);
+            elseif (strcmp(formatVersion, '3.2'))
+                presGrd = [];
+                for idG = 1:length(idGrd)
+                    if (trajParamDataMode(presParamId, idGrd(idG)) == 'R')
+                        presGrd = [presGrd pres(idGrd(idG))];
+                    else
+                        presGrd = [presGrd presAdjusted(idGrd(idG))];
+                    end
+                end
             end
-            presGrd = presVal(idGrd);
-         elseif (strcmp(formatVersion, '3.2'))
-            presGrd = [];
-            for idG = 1:length(idGrd)
-               if (trajParamDataMode(presParamId, idGrd(idG)) == 'R')
-                  presGrd = [presGrd pres(idGrd(idG))];
-               else
-                  presGrd = [presGrd presAdjusted(idGrd(idG))];
-               end
+            presGrd(presGrd == paramPres.fillValue) = [];
+            if (~isempty(presGrd))
+                floatData.groundedPres(idForCy) = min(presGrd);
             end
-         end
-         presGrd(presGrd == paramPres.fillValue) = [];
-         if (~isempty(presGrd))
-            floatData.groundedPres(idForCy) = min(presGrd);
-         end
-      end
-   end
+        end
+    end
 end
 
 % specific to float anomalies
 if (ismember(a_floatNum, [6901880]))
-   switch a_floatNum
-      case 6901880
-         floatData.profPresMax(floatData.cycleNumber == 14) = nan;
-         floatData.rpp(floatData.cycleNumber == 14) = nan;
-         floatData.grounded(floatData.cycleNumber == 14) = nan;
-         floatData.groundedPres(floatData.cycleNumber == 14) = nan;
-   end
+    switch a_floatNum
+        case 6901880
+            floatData.profPresMax(floatData.cycleNumber == 14) = nan;
+            floatData.rpp(floatData.cycleNumber == 14) = nan;
+            floatData.grounded(floatData.cycleNumber == 14) = nan;
+            floatData.groundedPres(floatData.cycleNumber == 14) = nan;
+    end
 end
 
 % sort the data in chronological order
@@ -1274,57 +1247,57 @@ global g_estProfLoc_rangePeriod;
 outputFileName = [a_outputDir '/estimate_profile_locations_' num2str(a_floatNum) '.csv'];
 fidOut = fopen(outputFileName, 'wt');
 if (fidOut == -1)
-   fprintf('ERROR: Unable to create CSV output file: %s\n', outputFileName);
-   return
+    fprintf('ERROR: Unable to create CSV output file: %s\n', outputFileName);
+    return
 end
 
 % print file header
 header = ['WMO;CyNum;Dir;Juld;JuldQC;JuldLoc;Lat;Lon;PosQC;Speed;ProfPresMax;' ...
-   'Rpp;Grd;GrdPres;GebcoDepth;SetNum;DepthConstraint;' ...
-   'ForwLat;ForwLon;ForwGebcoDepth;ForwDiffDepth;' ...
-   'BackwLat;BackLon;BackwGebcoDepth;BackDiffDepth;TrajLat;TrajLon;SpeedEst;' ...
-   'DIFF_DEPTH_TO_START;FLOAT_VS_BATHY_TOLERANCE;FLOAT_VS_BATHY_TOLERANCE_FOR_GRD;FIRST_RANGE;LAST_RANGE;RANGE_PERIOD;TOOL_VERSION'];
+    'Rpp;Grd;GrdPres;GebcoDepth;SetNum;DepthConstraint;' ...
+    'ForwLat;ForwLon;ForwGebcoDepth;ForwDiffDepth;' ...
+    'BackwLat;BackLon;BackwGebcoDepth;BackDiffDepth;TrajLat;TrajLon;SpeedEst;' ...
+    'DIFF_DEPTH_TO_START;FLOAT_VS_BATHY_TOLERANCE;FLOAT_VS_BATHY_TOLERANCE_FOR_GRD;FIRST_RANGE;LAST_RANGE;RANGE_PERIOD;TOOL_VERSION'];
 fprintf(fidOut, '%s\n', header);
 
 for idC = 1:length(a_floatData.cycleNumber)
-   fprintf(fidOut, ...
-      '%d;%d;%d;%s;%d;%s;%.3f;%.3f;%d;%.3f;%.1f;%.1f;%d;%.1f;%.1f;%d;%.1f;%.3f;%.3f;%.1f;%.1f;%.3f;%.3f;%.1f;%.1f;%.3f;%.3f;%.3f;;%d;%d;%d;%d;%d;%d;%s\n', ...
-      a_floatNum, ...
-      a_floatData.cycleNumber(idC), ...
-      a_floatData.direction(idC), ...
-      julian_2_gregorian_dec_argo(a_floatData.juld(idC)), ...
-      a_floatData.juldQc(idC), ...
-      julian_2_gregorian_dec_argo(a_floatData.juldLocation(idC)), ...
-      a_floatData.latitude(idC), ...
-      a_floatData.longitude(idC), ...
-      a_floatData.positionQc(idC), ...
-      a_floatData.speed(idC), ...
-      a_floatData.profPresMax(idC), ...
-      a_floatData.rpp(idC), ...
-      a_floatData.grounded(idC), ...
-      a_floatData.groundedPres(idC), ...
-      a_floatData.gebcoDepth(idC), ...
-      a_floatData.setNumber(idC), ...
-      a_floatData.depthConstraint(idC), ...
-      a_floatData.forwardLat(idC), ...
-      a_floatData.forwardLon(idC), ...
-      a_floatData.forwardGebcoDepth(idC), ...
-      a_floatData.forwardGebcoDepth(idC)-a_floatData.depthConstraint(idC), ...
-      a_floatData.backwardLat(idC), ...
-      a_floatData.backwardLon(idC), ...
-      a_floatData.backwardGebcoDepth(idC), ...
-      a_floatData.backwardGebcoDepth(idC)-a_floatData.depthConstraint(idC), ...
-      a_floatData.trajLat(idC), ...
-      a_floatData.trajLon(idC), ...
-      a_floatData.speedEst(idC), ...
-      g_estProfLoc_diffDepthToStart, ...
-      g_estProfLoc_floatVsbathyTolerance, ...
-      g_estProfLoc_floatVsbathyToleranceForGrd, ...
-      g_estProfLoc_firstRange, ...
-      g_estProfLoc_lastRange, ...
-      g_estProfLoc_rangePeriod, ...
-      g_estProfLoc_version ...
-      );
+    fprintf(fidOut, ...
+        '%d;%d;%d;%s;%d;%s;%.3f;%.3f;%d;%.3f;%.1f;%.1f;%d;%.1f;%.1f;%d;%.1f;%.3f;%.3f;%.1f;%.1f;%.3f;%.3f;%.1f;%.1f;%.3f;%.3f;%.3f;;%d;%d;%d;%d;%d;%d;%s\n', ...
+        a_floatNum, ...
+        a_floatData.cycleNumber(idC), ...
+        a_floatData.direction(idC), ...
+        julian_2_gregorian_dec_argo(a_floatData.juld(idC)), ...
+        a_floatData.juldQc(idC), ...
+        julian_2_gregorian_dec_argo(a_floatData.juldLocation(idC)), ...
+        a_floatData.latitude(idC), ...
+        a_floatData.longitude(idC), ...
+        a_floatData.positionQc(idC), ...
+        a_floatData.speed(idC), ...
+        a_floatData.profPresMax(idC), ...
+        a_floatData.rpp(idC), ...
+        a_floatData.grounded(idC), ...
+        a_floatData.groundedPres(idC), ...
+        a_floatData.gebcoDepth(idC), ...
+        a_floatData.setNumber(idC), ...
+        a_floatData.depthConstraint(idC), ...
+        a_floatData.forwardLat(idC), ...
+        a_floatData.forwardLon(idC), ...
+        a_floatData.forwardGebcoDepth(idC), ...
+        a_floatData.forwardGebcoDepth(idC)-a_floatData.depthConstraint(idC), ...
+        a_floatData.backwardLat(idC), ...
+        a_floatData.backwardLon(idC), ...
+        a_floatData.backwardGebcoDepth(idC), ...
+        a_floatData.backwardGebcoDepth(idC)-a_floatData.depthConstraint(idC), ...
+        a_floatData.trajLat(idC), ...
+        a_floatData.trajLon(idC), ...
+        a_floatData.speedEst(idC), ...
+        g_estProfLoc_diffDepthToStart, ...
+        g_estProfLoc_floatVsbathyTolerance, ...
+        g_estProfLoc_floatVsbathyToleranceForGrd, ...
+        g_estProfLoc_firstRange, ...
+        g_estProfLoc_lastRange, ...
+        g_estProfLoc_rangePeriod, ...
+        g_estProfLoc_version ...
+        );
 end
 
 fclose(fidOut);
@@ -1359,7 +1332,7 @@ o_dataValues = [];
 
 idVal = find(strcmp(a_dataName, a_dataList(1:2:end)) == 1, 1);
 if (~isempty(idVal))
-   o_dataValues = a_dataList{2*idVal};
+    o_dataValues = a_dataList{2*idVal};
 end
 
 return
@@ -1392,33 +1365,33 @@ return
 function [o_dataStruct] = get_data_init_struct
 
 o_dataStruct = struct( ...
-   'cycleNumber', [], ...
-   'direction', [], ...
-   'juld', [], ...
-   'juldQc', [], ...
-   'juldLocation', [], ...
-   'latitude', [], ...
-   'longitude', [], ...
-   'positionQc', [], ...
-   'speed', [], ...
-   'configMissionNumber', [], ...
-   'profPresMax', [], ...
-   'rpp', [], ...
-   'grounded', [], ...
-   'groundedPres', [], ...
-   'gebcoDepth', [], ...
-   'setNumber', [], ...
-   'depthConstraint', [], ...
-   'forwardLat', [], ...
-   'forwardLon', [], ...
-   'forwardGebcoDepth', [], ...
-   'backwardLat', [], ...
-   'backwardLon', [], ...
-   'backwardGebcoDepth', [], ...
-   'trajLat', [], ...
-   'trajLon', [], ...
-   'speedEst', [] ...
-   );
+    'cycleNumber', [], ...
+    'direction', [], ...
+    'juld', [], ...
+    'juldQc', [], ...
+    'juldLocation', [], ...
+    'latitude', [], ...
+    'longitude', [], ...
+    'positionQc', [], ...
+    'speed', [], ...
+    'configMissionNumber', [], ...
+    'profPresMax', [], ...
+    'rpp', [], ...
+    'grounded', [], ...
+    'groundedPres', [], ...
+    'gebcoDepth', [], ...
+    'setNumber', [], ...
+    'depthConstraint', [], ...
+    'forwardLat', [], ...
+    'forwardLon', [], ...
+    'forwardGebcoDepth', [], ...
+    'backwardLat', [], ...
+    'backwardLon', [], ...
+    'backwardGebcoDepth', [], ...
+    'trajLat', [], ...
+    'trajLon', [], ...
+    'speedEst', [] ...
+    );
 
 return
 
@@ -1449,10 +1422,10 @@ function [o_depth] = get_gebco_depth(a_lon, a_lat, a_gebcoPathFileName)
 [elevOri] = get_gebco_elev_point(a_lon, a_lat, a_gebcoPathFileName);
 elev = mean(elevOri, 2);
 if (any(isnan(elev)))
-   idNan = find(isnan(elev));
-   for idL = idNan'
-      elev(idL) = mean(elevOri(idL, ~isnan(elevOri(idL, :))));
-   end
+    idNan = find(isnan(elev));
+    for idL = idNan'
+        elev(idL) = mean(elevOri(idL, ~isnan(elevOri(idL, :))));
+    end
 end
 o_depth = -elev';
 
@@ -1492,36 +1465,36 @@ o_elev = nan(length(a_lon), 4);
 
 % check inputs
 if (a_lon < -180)
-   fprintf('ERROR: get_gebco_elev_point: input lon < -180\n');
-   return
+    fprintf('ERROR: get_gebco_elev_point: input lon < -180\n');
+    return
 end
 if (a_lon >= 360)
-   fprintf('ERROR: get_gebco_elev_point: input lon >= 360\n');
-   return
+    fprintf('ERROR: get_gebco_elev_point: input lon >= 360\n');
+    return
 end
 if (a_lat < -90)
-   fprintf('ERROR: get_gebco_elev_point: input lat < -90\n');
-   return
+    fprintf('ERROR: get_gebco_elev_point: input lat < -90\n');
+    return
 elseif (a_lat > 90)
-   fprintf('ERROR: get_gebco_elev_point: input lat > 90\n');
-   return
+    fprintf('ERROR: get_gebco_elev_point: input lat > 90\n');
+    return
 end
 
 if (a_lon >= 180)
-   a_lon = a_lon - 360;
+    a_lon = a_lon - 360;
 end
 
 % check GEBCO file exists
 if ~(exist(a_gebcoFileName, 'file') == 2)
-   fprintf('ERROR: GEBCO file not found (%s)\n', a_gebcoFileName);
-   return
+    fprintf('ERROR: GEBCO file not found (%s)\n', a_gebcoFileName);
+    return
 end
 
 % open NetCDF file
 fCdf = netcdf.open(a_gebcoFileName, 'NC_NOWRITE');
 if (isempty(fCdf))
-   fprintf('RTQC_ERROR: Unable to open NetCDF input file: %s\n', a_gebcoFileName);
-   return
+    fprintf('RTQC_ERROR: Unable to open NetCDF input file: %s\n', a_gebcoFileName);
+    return
 end
 
 lonVarId = netcdf.inqVarID(fCdf, 'lon');
@@ -1535,98 +1508,98 @@ maxLon = max(lon);
 
 for idP = 1:length(a_lat)
 
-   if (isnan(a_lat(idP)) || isnan(a_lon(idP)))
-      continue
-   end
+    if (isnan(a_lat(idP)) || isnan(a_lon(idP)))
+        continue
+    end
 
-   idLigStart = find(lat <= a_lat(idP), 1, 'last');
-   if (isempty(idLigStart))
-      idLigStart = 1;
-   end
-   idLigEnd = find(lat >= a_lat(idP), 1, 'first');
-   if (isempty(idLigEnd))
-      idLigEnd = length(lat);
-   end
-   %    latVal = lat(fliplr(idLigStart:idLigEnd));
+    idLigStart = find(lat <= a_lat(idP), 1, 'last');
+    if (isempty(idLigStart))
+        idLigStart = 1;
+    end
+    idLigEnd = find(lat >= a_lat(idP), 1, 'first');
+    if (isempty(idLigEnd))
+        idLigEnd = length(lat);
+    end
+    %    latVal = lat(fliplr(idLigStart:idLigEnd));
 
-   % a_lon(idP) is in the [-180, 180[ interval
-   % it can be in 3 zones:
-   % case 1: [-180, minLon[
-   % case 2: [minLon, maxLon]
-   % case 3: ]maxLon, -180[
-   if ((a_lon(idP) >= minLon) && (a_lon(idP) <= maxLon))
-      % case 2
-      idColStart = find(lon <= a_lon(idP), 1, 'last');
-      idColEnd = find(lon >= a_lon(idP), 1, 'first');
+    % a_lon(idP) is in the [-180, 180[ interval
+    % it can be in 3 zones:
+    % case 1: [-180, minLon[
+    % case 2: [minLon, maxLon]
+    % case 3: ]maxLon, -180[
+    if ((a_lon(idP) >= minLon) && (a_lon(idP) <= maxLon))
+        % case 2
+        idColStart = find(lon <= a_lon(idP), 1, 'last');
+        idColEnd = find(lon >= a_lon(idP), 1, 'first');
 
-      elev = nan(length(idLigStart:idLigEnd), length(idColStart:idColEnd));
-      for idL = idLigStart:idLigEnd
-         elev(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 idColStart-1]), fliplr([1 length(idColStart:idColEnd)]))';
-      end
+        elev = nan(length(idLigStart:idLigEnd), length(idColStart:idColEnd));
+        for idL = idLigStart:idLigEnd
+            elev(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 idColStart-1]), fliplr([1 length(idColStart:idColEnd)]))';
+        end
 
-      %       lonVal = lon(idColStart:idColEnd);
-   elseif (a_lon(idP) < minLon)
-      % case 1
-      elev1 = nan(length(idLigStart:idLigEnd), 1);
-      for idL = idLigStart:idLigEnd
-         elev1(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 length(lon)-1]), fliplr([1 1]))';
-      end
+        %       lonVal = lon(idColStart:idColEnd);
+    elseif (a_lon(idP) < minLon)
+        % case 1
+        elev1 = nan(length(idLigStart:idLigEnd), 1);
+        for idL = idLigStart:idLigEnd
+            elev1(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 length(lon)-1]), fliplr([1 1]))';
+        end
 
-      %       lonVal1 = lon(end);
+        %       lonVal1 = lon(end);
 
-      elev2 = nan(length(idLigStart:idLigEnd), 1);
-      for idL = idLigStart:idLigEnd
-         elev2(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 0]), fliplr([1 1]))';
-      end
+        elev2 = nan(length(idLigStart:idLigEnd), 1);
+        for idL = idLigStart:idLigEnd
+            elev2(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 0]), fliplr([1 1]))';
+        end
 
-      %       lonVal2 = lon(1) + 360;
+        %       lonVal2 = lon(1) + 360;
 
-      elev = cat(2, elev1, elev2);
-      %       lonVal = cat(1, lonVal1, lonVal2);
-      clear elev1 elev2
-   elseif (a_lon(idP) > maxLon)
-      % case 3
-      elev1 = nan(length(idLigStart:idLigEnd), 1);
-      for idL = idLigStart:idLigEnd
-         elev1(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 length(lon)-1]), fliplr([1 1]))';
-      end
+        elev = cat(2, elev1, elev2);
+        %       lonVal = cat(1, lonVal1, lonVal2);
+        clear elev1 elev2
+    elseif (a_lon(idP) > maxLon)
+        % case 3
+        elev1 = nan(length(idLigStart:idLigEnd), 1);
+        for idL = idLigStart:idLigEnd
+            elev1(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 length(lon)-1]), fliplr([1 1]))';
+        end
 
-      %       lonVal1 = lon(end);
+        %       lonVal1 = lon(end);
 
-      elev2 = nan(length(idLigStart:idLigEnd), 1);
-      for idL = idLigStart:idLigEnd
-         elev2(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 0]), fliplr([1 1]))';
-      end
+        elev2 = nan(length(idLigStart:idLigEnd), 1);
+        for idL = idLigStart:idLigEnd
+            elev2(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 0]), fliplr([1 1]))';
+        end
 
-      %       lonVal2 = lon(1) + 360;
+        %       lonVal2 = lon(1) + 360;
 
-      elev = cat(2, elev1, elev2);
-      %       lonVal = cat(1, lonVal1, lonVal2);
-      clear elev1 elev2
-   end
+        elev = cat(2, elev1, elev2);
+        %       lonVal = cat(1, lonVal1, lonVal2);
+        clear elev1 elev2
+    end
 
-   if (~isempty(elev))
-      if (size(elev, 1) == 2)
-         if (size(elev, 2) == 2)
-            o_elev(idP, 1) = elev(2, 1);
-            o_elev(idP, 2) = elev(1, 1);
-            o_elev(idP, 3) = elev(2, 2);
-            o_elev(idP, 4) = elev(1, 2);
-         else
-            o_elev(idP, 1) = elev(2);
-            o_elev(idP, 2) = elev(1);
-         end
-      else
-         if (size(elev, 2) == 2)
-            o_elev(idP, 1) = elev(1, 1);
-            o_elev(idP, 3) = elev(1, 2);
-         else
-            o_elev(idP, 1) = elev;
-         end
-      end
-   end
+    if (~isempty(elev))
+        if (size(elev, 1) == 2)
+            if (size(elev, 2) == 2)
+                o_elev(idP, 1) = elev(2, 1);
+                o_elev(idP, 2) = elev(1, 1);
+                o_elev(idP, 3) = elev(2, 2);
+                o_elev(idP, 4) = elev(1, 2);
+            else
+                o_elev(idP, 1) = elev(2);
+                o_elev(idP, 2) = elev(1);
+            end
+        else
+            if (size(elev, 2) == 2)
+                o_elev(idP, 1) = elev(1, 1);
+                o_elev(idP, 3) = elev(1, 2);
+            else
+                o_elev(idP, 1) = elev;
+            end
+        end
+    end
 
-   clear elev
+    clear elev
 end
 
 netcdf.close(fCdf);
@@ -1817,63 +1790,63 @@ function [o_attributeStruct] = get_netcdf_param_attributes(a_paramName)
 
 switch (a_paramName)
 
-   case 'JULD'
-      o_attributeStruct = struct('name', 'JULD', ...
-         'longName', 'Julian day (UTC) of each measurement relative to REFERENCE_DATE_TIME', ...
-         'standardName', 'time', ...
-         'units', 'days since 1950-01-01 00:00:00 UTC', ...
-         'conventions', 'Relative julian days with decimal part (as parts of day)', ...
-         'fillValue', double(999999), ...
-         'axis', 'T', ...
-         'paramType', '', ...
-         'paramNcType', 'NC_DOUBLE', ...
-         'adjAllowed', 0);
+    case 'JULD'
+        o_attributeStruct = struct('name', 'JULD', ...
+            'longName', 'Julian day (UTC) of each measurement relative to REFERENCE_DATE_TIME', ...
+            'standardName', 'time', ...
+            'units', 'days since 1950-01-01 00:00:00 UTC', ...
+            'conventions', 'Relative julian days with decimal part (as parts of day)', ...
+            'fillValue', double(999999), ...
+            'axis', 'T', ...
+            'paramType', '', ...
+            'paramNcType', 'NC_DOUBLE', ...
+            'adjAllowed', 0);
 
-   case 'LATITUDE'
-      o_attributeStruct = struct('name', 'LATITUDE', ...
-         'longName', 'Latitude of each location', ...
-         'standardName', 'latitude', ...
-         'units', 'degree_north', ...
-         'fillValue', double(99999), ...
-         'validMin', double(-90), ...
-         'validMax', double(90), ...
-         'axis', 'Y', ...
-         'paramType', '', ...
-         'paramNcType', 'NC_DOUBLE', ...
-         'adjAllowed', 0);
+    case 'LATITUDE'
+        o_attributeStruct = struct('name', 'LATITUDE', ...
+            'longName', 'Latitude of each location', ...
+            'standardName', 'latitude', ...
+            'units', 'degree_north', ...
+            'fillValue', double(99999), ...
+            'validMin', double(-90), ...
+            'validMax', double(90), ...
+            'axis', 'Y', ...
+            'paramType', '', ...
+            'paramNcType', 'NC_DOUBLE', ...
+            'adjAllowed', 0);
 
-   case 'LONGITUDE'
-      o_attributeStruct = struct('name', 'LONGITUDE', ...
-         'longName', 'Longitude of each location', ...
-         'standardName', 'longitude', ...
-         'units', 'degree_east', ...
-         'fillValue', double(99999), ...
-         'validMin', double(-180), ...
-         'validMax', double(180), ...
-         'axis', 'X', ...
-         'paramType', '', ...
-         'paramNcType', 'NC_DOUBLE', ...
-         'adjAllowed', 0);
+    case 'LONGITUDE'
+        o_attributeStruct = struct('name', 'LONGITUDE', ...
+            'longName', 'Longitude of each location', ...
+            'standardName', 'longitude', ...
+            'units', 'degree_east', ...
+            'fillValue', double(99999), ...
+            'validMin', double(-180), ...
+            'validMax', double(180), ...
+            'axis', 'X', ...
+            'paramType', '', ...
+            'paramNcType', 'NC_DOUBLE', ...
+            'adjAllowed', 0);
 
-   case 'PRES'
-      o_attributeStruct = struct('name', 'PRES', ...
-         'longName', 'Sea water pressure, equals 0 at sea-level', ...
-         'standardName', 'sea_water_pressure', ...
-         'fillValue', single(99999), ...
-         'units', 'decibar', ...
-         'validMin', single(0), ...
-         'validMax', single(12000), ...
-         'axis', 'Z', ...
-         'cFormat', '%7.1f', ...
-         'fortranFormat', 'F7.1', ...
-         'resolution', single(0.1), ...
-         'paramType', 'c', ...
-         'paramNcType', 'NC_FLOAT', ...
-         'adjAllowed', 1);
+    case 'PRES'
+        o_attributeStruct = struct('name', 'PRES', ...
+            'longName', 'Sea water pressure, equals 0 at sea-level', ...
+            'standardName', 'sea_water_pressure', ...
+            'fillValue', single(99999), ...
+            'units', 'decibar', ...
+            'validMin', single(0), ...
+            'validMax', single(12000), ...
+            'axis', 'Z', ...
+            'cFormat', '%7.1f', ...
+            'fortranFormat', 'F7.1', ...
+            'resolution', single(0.1), ...
+            'paramType', 'c', ...
+            'paramNcType', 'NC_FLOAT', ...
+            'adjAllowed', 1);
 
-   otherwise
+    otherwise
 
-      fprintf('ERROR: Attribute list no yet defined for parameter %s\n', a_paramName);
+        fprintf('ERROR: Attribute list no yet defined for parameter %s\n', a_paramName);
 
 end
 
@@ -1908,29 +1881,29 @@ o_ncData = [];
 
 if (exist(a_ncPathFileName, 'file') == 2)
 
-   % open NetCDF file
-   fCdf = netcdf.open(a_ncPathFileName, 'NC_NOWRITE');
-   if (isempty(fCdf))
-      fprintf('ERROR: Unable to open NetCDF input file: %s\n', a_ncPathFileName);
-      return
-   end
+    % open NetCDF file
+    fCdf = netcdf.open(a_ncPathFileName, 'NC_NOWRITE');
+    if (isempty(fCdf))
+        fprintf('ERROR: Unable to open NetCDF input file: %s\n', a_ncPathFileName);
+        return
+    end
 
-   % retrieve variables from NetCDF file
-   for idVar = 1:length(a_wantedVars)
-      varName = a_wantedVars{idVar};
+    % retrieve variables from NetCDF file
+    for idVar = 1:length(a_wantedVars)
+        varName = a_wantedVars{idVar};
 
-      if (var_is_present_dec_argo(fCdf, varName))
-         varValue = netcdf.getVar(fCdf, netcdf.inqVarID(fCdf, varName));
-         o_ncData = [o_ncData {varName} {varValue}];
-      else
-         %          fprintf('WARNING: Variable %s not present in file : %s\n', ...
-         %             varName, a_ncPathFileName);
-         o_ncData = [o_ncData {varName} {' '}];
-      end
+        if (var_is_present_dec_argo(fCdf, varName))
+            varValue = netcdf.getVar(fCdf, netcdf.inqVarID(fCdf, varName));
+            o_ncData = [o_ncData {varName} {varValue}];
+        else
+            %          fprintf('WARNING: Variable %s not present in file : %s\n', ...
+            %             varName, a_ncPathFileName);
+            o_ncData = [o_ncData {varName} {' '}];
+        end
 
-   end
+    end
 
-   netcdf.close(fCdf);
+    netcdf.close(fCdf);
 end
 
 return
@@ -1963,11 +1936,11 @@ o_present = 0;
 [nbDims, nbVars, nbGAtts, unlimId] = netcdf.inq(a_ncId);
 
 for idVar= 0:nbVars-1
-   [varName, varType, varDims, nbAtts] = netcdf.inqVar(a_ncId, idVar);
-   if (strcmp(varName, a_varName))
-      o_present = 1;
-      break
-   end
+    [varName, varType, varDims, nbAtts] = netcdf.inqVar(a_ncId, idVar);
+    if (strcmp(varName, a_varName))
+        o_present = 1;
+        break
+    end
 end
 
 return
@@ -2003,9 +1976,9 @@ return
 %   05/18/2017 - RNU - creation
 % ------------------------------------------------------------------------------
 function [o_interpLocLon, o_interpLocLat] = interpolate_between_2_locations(...
-   a_firstLocDate, a_firstLocLon, a_firstLocLat, ...
-   a_secondLocDate, a_secondLocLon, a_secondLocLat, ...
-   a_interpDate)
+    a_firstLocDate, a_firstLocLon, a_firstLocLat, ...
+    a_secondLocDate, a_secondLocLon, a_secondLocLat, ...
+    a_interpDate)
 
 % output parameters initialization
 o_interpLocLon = [];
@@ -2014,19 +1987,19 @@ o_interpLocLat = [];
 
 % interpolate between the locations
 if (((abs(a_firstLocLon) > 90) && (abs(a_secondLocLon) > 90)) && ...
-      (((a_firstLocLon > 0) && (a_secondLocLon < 0)) || ((a_secondLocLon > 0) && (a_firstLocLon < 0))))
-   % the float crossed the date line
-   if (a_secondLocLon < 0)
-      a_secondLocLon = a_secondLocLon + 360;
-   else
-      a_firstLocLon = a_firstLocLon + 360;
-   end
-   o_interpLocLon = interp1q([a_firstLocDate; a_secondLocDate], [a_firstLocLon; a_secondLocLon], a_interpDate);
-   if (o_interpLocLon >= 180)
-      o_interpLocLon = o_interpLocLon - 360;
-   end
+        (((a_firstLocLon > 0) && (a_secondLocLon < 0)) || ((a_secondLocLon > 0) && (a_firstLocLon < 0))))
+    % the float crossed the date line
+    if (a_secondLocLon < 0)
+        a_secondLocLon = a_secondLocLon + 360;
+    else
+        a_firstLocLon = a_firstLocLon + 360;
+    end
+    o_interpLocLon = interp1q([a_firstLocDate; a_secondLocDate], [a_firstLocLon; a_secondLocLon], a_interpDate);
+    if (o_interpLocLon >= 180)
+        o_interpLocLon = o_interpLocLon - 360;
+    end
 else
-   o_interpLocLon = interp1q([a_firstLocDate; a_secondLocDate], [a_firstLocLon; a_secondLocLon], a_interpDate);
+    o_interpLocLon = interp1q([a_firstLocDate; a_secondLocDate], [a_firstLocLon; a_secondLocLon], a_interpDate);
 end
 o_interpLocLat = interp1q([a_firstLocDate; a_secondLocDate], [a_firstLocLat; a_secondLocLat], a_interpDate);
 
@@ -2060,7 +2033,7 @@ return
 %   08/01/2014 - RNU - creation
 % ------------------------------------------------------------------------------
 function [o_lonMin, o_lonMax, o_latMin, o_latMax] = ...
-   compute_geo_extrema(a_date, a_lon, a_lat, a_zoom)
+    compute_geo_extrema(a_date, a_lon, a_lat, a_zoom)
 
 o_lonMin = [];
 o_lonMax = [];
@@ -2079,9 +2052,9 @@ init_global_values;
 % compute the geographic boundaries of the plot
 
 if (~isempty(a_date))
-   idNoData = find((a_date == g_dateDef) | (a_lon == g_lonDef) | (a_lat == g_latDef));
+    idNoData = find((a_date == g_dateDef) | (a_lon == g_lonDef) | (a_lat == g_latDef));
 else
-   idNoData = find((a_lon == g_lonDef) | (a_lat == g_latDef));
+    idNoData = find((a_lon == g_lonDef) | (a_lat == g_latDef));
 end
 a_lon(idNoData) = [];
 a_lat(idNoData) = [];
@@ -2091,7 +2064,7 @@ latMin = min(a_lat);
 latMax = max(a_lat);
 latMarge = abs((latMax-latMin)/5);
 if (latMarge == 0)
-   latMarge = 1/60;
+    latMarge = 1/60;
 end
 latMin = latMin - latMarge;
 latMax = latMax + latMarge;
@@ -2101,17 +2074,17 @@ lonMax = max(a_lon);
 
 borneLonMax = 180;
 if ((abs(lonMin - lonMax) > 180) && ...
-      (abs(lonMin - lonMax) > abs(lonMin + lonMax)))
-   id = find(a_lon < 0);
-   a_lon(id) = a_lon(id) + 360;
-   lonMin = min(a_lon);
-   lonMax = max(a_lon);
-   borneLonMax = 360;
+        (abs(lonMin - lonMax) > abs(lonMin + lonMax)))
+    id = find(a_lon < 0);
+    a_lon(id) = a_lon(id) + 360;
+    lonMin = min(a_lon);
+    lonMax = max(a_lon);
+    borneLonMax = 360;
 end
 
 lonMarge = abs((lonMax-lonMin)/5);
 if (lonMarge == 0)
-   lonMarge = 1/60;
+    lonMarge = 1/60;
 end
 lonMin = lonMin - lonMarge;
 lonMax = lonMax + lonMarge;
@@ -2125,16 +2098,16 @@ lonMin = lonMin - a_zoom*2*deltaLon;
 lonMax = lonMax + a_zoom*2*deltaLon;
 
 if (latMin < -90)
-   latMin = -89.99;
+    latMin = -89.99;
 end
 if (latMax > 90)
-   latMax = 89.99;
+    latMax = 89.99;
 end
 if (lonMin < -180)
-   lonMin = -179.99;
+    lonMin = -179.99;
 end
 if (lonMax > borneLonMax)
-   lonMax = borneLonMax;
+    lonMax = borneLonMax;
 end
 
 o_latMin = latMin;
@@ -2156,13 +2129,13 @@ coef = 1.4;
 deltaX = xSE - xSW;
 deltaY = yNW - ySW;
 if (deltaX/deltaY > coef)
-   complement = (deltaX/coef) - deltaY;
-   ySW = ySW - complement/2;
-   yNW = yNW + complement/2;
+    complement = (deltaX/coef) - deltaY;
+    ySW = ySW - complement/2;
+    yNW = yNW + complement/2;
 else
-   complement = deltaY*coef - deltaX;
-   xSW = xSW - complement/2;
-   xSE = xSE + complement/2;
+    complement = deltaY*coef - deltaX;
+    xSW = xSW - complement/2;
+    xSE = xSE + complement/2;
 end
 
 [lonMin, latMin] = m_xy2ll(xSW, ySW);
@@ -2170,12 +2143,12 @@ end
 [lonMax, bidon] = m_xy2ll(xSE, ySE);
 
 if ((latMin >= -90) && (latMax <= 90) && (lonMin >= -180) && (lonMax <= borneLonMax))
-   o_latMin = latMin;
-   o_latMax = latMax;
-   o_lonMin = lonMin;
-   o_lonMax = lonMax;
+    o_latMin = latMin;
+    o_latMax = latMax;
+    o_lonMin = lonMin;
+    o_lonMax = lonMax;
 else
-   fprintf('compute_geo_extrema: cannot use the optimization of the drawing window\n');
+    fprintf('compute_geo_extrema: cannot use the optimization of the drawing window\n');
 end
 
 return
@@ -2208,7 +2181,7 @@ return
 %   04/27/2020 - RNU - creation
 % ------------------------------------------------------------------------------
 function [o_elev, o_lon, o_lat] = get_gebco_elev_zone( ...
-   a_lonMin, a_lonMax, a_latMin, a_latMax, a_gebcoFileName)
+    a_lonMin, a_lonMax, a_latMin, a_latMax, a_gebcoFileName)
 
 % output parameters initialization
 o_elev = [];
@@ -2216,42 +2189,42 @@ o_lon = [];
 o_lat = [];
 
 if (isempty(a_gebcoFileName))
-   a_gebcoFileName = 'C:\Users\jprannou\_RNU\_ressources\GEBCO_2022\GEBCO_2022.nc';
+    a_gebcoFileName = 'C:\Users\jprannou\_RNU\_ressources\GEBCO_2022\GEBCO_2022.nc';
 end
 
 
 % check inputs
 if (a_latMin > a_latMax)
-   fprintf('ERROR: get_gebco_elev_zone: latMin > latMax\n');
-   return
+    fprintf('ERROR: get_gebco_elev_zone: latMin > latMax\n');
+    return
 else
-   if (a_latMin < -90)
-      fprintf('ERROR: get_gebco_elev_zone: latMin < -90\n');
-      return
-   elseif (a_latMax > 90)
-      fprintf('ERROR: get_gebco_elev_zone: a_latMax > 90\n');
-      return
-   end
+    if (a_latMin < -90)
+        fprintf('ERROR: get_gebco_elev_zone: latMin < -90\n');
+        return
+    elseif (a_latMax > 90)
+        fprintf('ERROR: get_gebco_elev_zone: a_latMax > 90\n');
+        return
+    end
 end
 if (a_lonMin >= 180)
-   a_lonMin = a_lonMin - 360;
-   a_lonMax = a_lonMax - 360;
+    a_lonMin = a_lonMin - 360;
+    a_lonMax = a_lonMax - 360;
 end
 if (a_lonMax < a_lonMin)
-   a_lonMax = a_lonMax + 360;
+    a_lonMax = a_lonMax + 360;
 end
 
 % check GEBCO file exists
 if ~(exist(a_gebcoFileName, 'file') == 2)
-   fprintf('ERROR: GEBCO file not found (%s)\n', a_gebcoFileName);
-   return
+    fprintf('ERROR: GEBCO file not found (%s)\n', a_gebcoFileName);
+    return
 end
 
 % open NetCDF file
 fCdf = netcdf.open(a_gebcoFileName, 'NC_NOWRITE');
 if (isempty(fCdf))
-   fprintf('RTQC_ERROR: Unable to open NetCDF input file: %s\n', a_gebcoFileName);
-   return
+    fprintf('RTQC_ERROR: Unable to open NetCDF input file: %s\n', a_gebcoFileName);
+    return
 end
 
 lonVarId = netcdf.inqVarID(fCdf, 'lon');
@@ -2287,208 +2260,208 @@ latVal = lat(fliplr(idLigStart:idLigEnd));
 % case B4: a_lonMin in ]maxLon, -180[ and a_lonMax in [minLon+360, maxLon+360]
 
 if ((a_lonMax - a_lonMin) <= (maxLon - minLon))
-   if (a_lonMax < 180) % case A
-      if ((a_lonMin >= minLon) && (a_lonMin <= maxLon) && ...
-            (a_lonMax >= minLon) && (a_lonMax <= maxLon))
-         % case A3
-         idColStart = find(lon <= a_lonMin, 1, 'last');
-         idColEnd = find(lon >= a_lonMax, 1, 'first');
+    if (a_lonMax < 180) % case A
+        if ((a_lonMin >= minLon) && (a_lonMin <= maxLon) && ...
+                (a_lonMax >= minLon) && (a_lonMax <= maxLon))
+            % case A3
+            idColStart = find(lon <= a_lonMin, 1, 'last');
+            idColEnd = find(lon >= a_lonMax, 1, 'first');
 
-         elev = nan(length(idLigStart:idLigEnd), length(idColStart:idColEnd));
-         for idL = idLigStart:idLigEnd
-            elev(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 idColStart-1]), fliplr([1 length(idColStart:idColEnd)]))';
-         end
+            elev = nan(length(idLigStart:idLigEnd), length(idColStart:idColEnd));
+            for idL = idLigStart:idLigEnd
+                elev(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 idColStart-1]), fliplr([1 length(idColStart:idColEnd)]))';
+            end
 
-         lonVal = lon(idColStart:idColEnd);
-      elseif ((a_lonMin < minLon) && ...
-            (a_lonMax >= minLon) && (a_lonMax <= maxLon))
-         % case A2
-         elev1 = nan(length(idLigStart:idLigEnd), 1);
-         for idL = idLigStart:idLigEnd
-            elev1(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 length(lon)-1]), fliplr([1 1]))';
-         end
+            lonVal = lon(idColStart:idColEnd);
+        elseif ((a_lonMin < minLon) && ...
+                (a_lonMax >= minLon) && (a_lonMax <= maxLon))
+            % case A2
+            elev1 = nan(length(idLigStart:idLigEnd), 1);
+            for idL = idLigStart:idLigEnd
+                elev1(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 length(lon)-1]), fliplr([1 1]))';
+            end
 
-         lonVal1 = lon(end);
+            lonVal1 = lon(end);
 
-         idColStart = 1;
-         idColEnd = find(lon >= a_lonMax, 1, 'first');
+            idColStart = 1;
+            idColEnd = find(lon >= a_lonMax, 1, 'first');
 
-         elev2 = nan(length(idLigStart:idLigEnd), length(idColStart:idColEnd));
-         for idL = idLigStart:idLigEnd
-            elev2(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 idColStart-1]), fliplr([1 length(idColStart:idColEnd)]))';
-         end
+            elev2 = nan(length(idLigStart:idLigEnd), length(idColStart:idColEnd));
+            for idL = idLigStart:idLigEnd
+                elev2(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 idColStart-1]), fliplr([1 length(idColStart:idColEnd)]))';
+            end
 
-         lonVal2 = lon(idColStart:idColEnd) + 360;
+            lonVal2 = lon(idColStart:idColEnd) + 360;
 
-         elev = cat(2, elev1, elev2);
-         lonVal = cat(1, lonVal1, lonVal2);
-         clear elev1 elev2 lonVal1 lonVal2
-      elseif ((a_lonMin >= minLon) && (a_lonMin <= maxLon) && ...
-            (a_lonMax > maxLon))
-         % case A4
-         idColStart = find(lon <= a_lonMin, 1, 'last');
-         idColEnd = length(lon);
+            elev = cat(2, elev1, elev2);
+            lonVal = cat(1, lonVal1, lonVal2);
+            clear elev1 elev2 lonVal1 lonVal2
+        elseif ((a_lonMin >= minLon) && (a_lonMin <= maxLon) && ...
+                (a_lonMax > maxLon))
+            % case A4
+            idColStart = find(lon <= a_lonMin, 1, 'last');
+            idColEnd = length(lon);
 
-         elev1 = nan(length(idLigStart:idLigEnd), length(idColStart:idColEnd));
-         for idL = idLigStart:idLigEnd
-            elev1(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 idColStart-1]), fliplr([1 length(idColStart:idColEnd)]))';
-         end
+            elev1 = nan(length(idLigStart:idLigEnd), length(idColStart:idColEnd));
+            for idL = idLigStart:idLigEnd
+                elev1(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 idColStart-1]), fliplr([1 length(idColStart:idColEnd)]))';
+            end
 
-         lonVal1 = lon(idColStart:idColEnd);
+            lonVal1 = lon(idColStart:idColEnd);
 
-         elev2 = nan(length(idLigStart:idLigEnd), 1);
-         for idL = idLigStart:idLigEnd
-            elev2(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 0]), fliplr([1 1]))';
-         end
+            elev2 = nan(length(idLigStart:idLigEnd), 1);
+            for idL = idLigStart:idLigEnd
+                elev2(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 0]), fliplr([1 1]))';
+            end
 
-         lonVal2 = lon(1) + 360;
+            lonVal2 = lon(1) + 360;
 
-         elev = cat(2, elev1, elev2);
-         lonVal = cat(1, lonVal1, lonVal2);
-         clear elev1 elev2 lonVal1 lonVal2
-      elseif ((a_lonMin < minLon) && ...
-            (a_lonMax < minLon))
-         % case A1
-         elev1 = nan(length(idLigStart:idLigEnd), 1);
-         for idL = idLigStart:idLigEnd
-            elev1(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 length(lon)-1]), fliplr([1 1]))';
-         end
+            elev = cat(2, elev1, elev2);
+            lonVal = cat(1, lonVal1, lonVal2);
+            clear elev1 elev2 lonVal1 lonVal2
+        elseif ((a_lonMin < minLon) && ...
+                (a_lonMax < minLon))
+            % case A1
+            elev1 = nan(length(idLigStart:idLigEnd), 1);
+            for idL = idLigStart:idLigEnd
+                elev1(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 length(lon)-1]), fliplr([1 1]))';
+            end
 
-         lonVal1 = lon(end);
+            lonVal1 = lon(end);
 
-         elev2 = nan(length(idLigStart:idLigEnd), 1);
-         for idL = idLigStart:idLigEnd
-            elev2(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 0]), fliplr([1 1]))';
-         end
+            elev2 = nan(length(idLigStart:idLigEnd), 1);
+            for idL = idLigStart:idLigEnd
+                elev2(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 0]), fliplr([1 1]))';
+            end
 
-         lonVal2 = lon(1) + 360;
+            lonVal2 = lon(1) + 360;
 
-         elev = cat(2, elev1, elev2);
-         lonVal = cat(1, lonVal1, lonVal2);
-         clear elev1 elev2 lonVal1 lonVal2
-      elseif ((a_lonMin > maxLon) && ...
-            (a_lonMax > maxLon))
-         % case A5
-         elev1 = nan(length(idLigStart:idLigEnd), 1);
-         for idL = idLigStart:idLigEnd
-            elev1(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 length(lon)-1]), fliplr([1 1]))';
-         end
+            elev = cat(2, elev1, elev2);
+            lonVal = cat(1, lonVal1, lonVal2);
+            clear elev1 elev2 lonVal1 lonVal2
+        elseif ((a_lonMin > maxLon) && ...
+                (a_lonMax > maxLon))
+            % case A5
+            elev1 = nan(length(idLigStart:idLigEnd), 1);
+            for idL = idLigStart:idLigEnd
+                elev1(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 length(lon)-1]), fliplr([1 1]))';
+            end
 
-         lonVal1 = lon(end);
+            lonVal1 = lon(end);
 
-         elev2 = nan(length(idLigStart:idLigEnd), 1);
-         for idL = idLigStart:idLigEnd
-            elev2(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 0]), fliplr([1 1]))';
-         end
+            elev2 = nan(length(idLigStart:idLigEnd), 1);
+            for idL = idLigStart:idLigEnd
+                elev2(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 0]), fliplr([1 1]))';
+            end
 
-         lonVal2 = lon(1) + 360;
+            lonVal2 = lon(1) + 360;
 
-         elev = cat(2, elev1, elev2);
-         lonVal = cat(1, lonVal1, lonVal2);
-         clear elev1 elev2 lonVal1 lonVal2
-      end
-   else % case B
-      if (a_lonMin <= maxLon) && (a_lonMax >= minLon + 360)
-         % case B2
-         idColStart = find(lon <= a_lonMin, 1, 'last');
-         idColEnd = length(lon);
+            elev = cat(2, elev1, elev2);
+            lonVal = cat(1, lonVal1, lonVal2);
+            clear elev1 elev2 lonVal1 lonVal2
+        end
+    else % case B
+        if (a_lonMin <= maxLon) && (a_lonMax >= minLon + 360)
+            % case B2
+            idColStart = find(lon <= a_lonMin, 1, 'last');
+            idColEnd = length(lon);
 
-         elev1 = nan(length(idLigStart:idLigEnd), length(idColStart:idColEnd));
-         for idL = idLigStart:idLigEnd
-            elev1(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 idColStart-1]), fliplr([1 length(idColStart:idColEnd)]))';
-         end
+            elev1 = nan(length(idLigStart:idLigEnd), length(idColStart:idColEnd));
+            for idL = idLigStart:idLigEnd
+                elev1(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 idColStart-1]), fliplr([1 length(idColStart:idColEnd)]))';
+            end
 
-         lonVal1 = lon(idColStart:idColEnd);
+            lonVal1 = lon(idColStart:idColEnd);
 
-         idColStart = 1;
-         idColEnd = find(lon >= a_lonMax - 360, 1, 'first');
+            idColStart = 1;
+            idColEnd = find(lon >= a_lonMax - 360, 1, 'first');
 
-         elev2 = nan(length(idLigStart:idLigEnd), length(idColStart:idColEnd));
-         for idL = idLigStart:idLigEnd
-            elev2(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 idColStart-1]), fliplr([1 length(idColStart:idColEnd)]))';
-         end
+            elev2 = nan(length(idLigStart:idLigEnd), length(idColStart:idColEnd));
+            for idL = idLigStart:idLigEnd
+                elev2(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 idColStart-1]), fliplr([1 length(idColStart:idColEnd)]))';
+            end
 
-         lonVal2 = lon(idColStart:idColEnd) + 360;
+            lonVal2 = lon(idColStart:idColEnd) + 360;
 
-         elev = cat(2, elev1, elev2);
-         lonVal = cat(1, lonVal1, lonVal2);
-         clear elev1 elev2 lonVal1 lonVal2
-      elseif (a_lonMin <= maxLon) && (a_lonMax < minLon + 360)
-         % case B1
-         idColStart = find(lon <= a_lonMin, 1, 'last');
-         idColEnd = length(lon);
+            elev = cat(2, elev1, elev2);
+            lonVal = cat(1, lonVal1, lonVal2);
+            clear elev1 elev2 lonVal1 lonVal2
+        elseif (a_lonMin <= maxLon) && (a_lonMax < minLon + 360)
+            % case B1
+            idColStart = find(lon <= a_lonMin, 1, 'last');
+            idColEnd = length(lon);
 
-         elev1 = nan(length(idLigStart:idLigEnd), length(idColStart:idColEnd));
-         for idL = idLigStart:idLigEnd
-            elev1(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 idColStart-1]), fliplr([1 length(idColStart:idColEnd)]))';
-         end
+            elev1 = nan(length(idLigStart:idLigEnd), length(idColStart:idColEnd));
+            for idL = idLigStart:idLigEnd
+                elev1(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 idColStart-1]), fliplr([1 length(idColStart:idColEnd)]))';
+            end
 
-         lonVal1 = lon(idColStart:idColEnd);
+            lonVal1 = lon(idColStart:idColEnd);
 
-         elev2 = nan(length(idLigStart:idLigEnd), 1);
-         for idL = idLigStart:idLigEnd
-            elev2(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 0]), fliplr([1 1]))';
-         end
+            elev2 = nan(length(idLigStart:idLigEnd), 1);
+            for idL = idLigStart:idLigEnd
+                elev2(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 0]), fliplr([1 1]))';
+            end
 
-         lonVal2 = lon(1) + 360;
+            lonVal2 = lon(1) + 360;
 
-         elev = cat(2, elev1, elev2);
-         lonVal = cat(1, lonVal1, lonVal2);
-         clear elev1 elev2 lonVal1 lonVal2
-      elseif (a_lonMin > maxLon) && (a_lonMax >= minLon + 360)
-         % case B4
-         elev1 = nan(length(idLigStart:idLigEnd), 1);
-         for idL = idLigStart:idLigEnd
-            elev1(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 length(lon)-1]), fliplr([1 1]))';
-         end
+            elev = cat(2, elev1, elev2);
+            lonVal = cat(1, lonVal1, lonVal2);
+            clear elev1 elev2 lonVal1 lonVal2
+        elseif (a_lonMin > maxLon) && (a_lonMax >= minLon + 360)
+            % case B4
+            elev1 = nan(length(idLigStart:idLigEnd), 1);
+            for idL = idLigStart:idLigEnd
+                elev1(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 length(lon)-1]), fliplr([1 1]))';
+            end
 
-         lonVal1 = lon(end);
+            lonVal1 = lon(end);
 
-         idColStart = 1;
-         idColEnd = find(lon >= a_lonMax - 360, 1, 'first');
+            idColStart = 1;
+            idColEnd = find(lon >= a_lonMax - 360, 1, 'first');
 
-         elev2 = nan(length(idLigStart:idLigEnd), length(idColStart:idColEnd));
-         for idL = idLigStart:idLigEnd
-            elev2(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 idColStart-1]), fliplr([1 length(idColStart:idColEnd)]))';
-         end
+            elev2 = nan(length(idLigStart:idLigEnd), length(idColStart:idColEnd));
+            for idL = idLigStart:idLigEnd
+                elev2(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 idColStart-1]), fliplr([1 length(idColStart:idColEnd)]))';
+            end
 
-         lonVal2 = lon(idColStart:idColEnd) + 360;
+            lonVal2 = lon(idColStart:idColEnd) + 360;
 
-         elev = cat(2, elev1, elev2);
-         lonVal = cat(1, lonVal1, lonVal2);
-         clear elev1 elev2 lonVal1 lonVal2
-      elseif (a_lonMin > maxLon) && (a_lonMax < minLon + 360)
-         % case B3
-         elev1 = nan(length(idLigStart:idLigEnd), 1);
-         for idL = idLigStart:idLigEnd
-            elev1(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 length(lon)-1]), fliplr([1 1]))';
-         end
+            elev = cat(2, elev1, elev2);
+            lonVal = cat(1, lonVal1, lonVal2);
+            clear elev1 elev2 lonVal1 lonVal2
+        elseif (a_lonMin > maxLon) && (a_lonMax < minLon + 360)
+            % case B3
+            elev1 = nan(length(idLigStart:idLigEnd), 1);
+            for idL = idLigStart:idLigEnd
+                elev1(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 length(lon)-1]), fliplr([1 1]))';
+            end
 
-         lonVal1 = lon(end);
+            lonVal1 = lon(end);
 
-         elev2 = nan(length(idLigStart:idLigEnd), 1);
-         for idL = idLigStart:idLigEnd
-            elev2(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 0]), fliplr([1 1]))';
-         end
+            elev2 = nan(length(idLigStart:idLigEnd), 1);
+            for idL = idLigStart:idLigEnd
+                elev2(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 0]), fliplr([1 1]))';
+            end
 
-         lonVal2 = lon(1) + 360;
+            lonVal2 = lon(1) + 360;
 
-         elev = cat(2, elev1, elev2);
-         lonVal = cat(1, lonVal1, lonVal2);
-         clear elev1 elev2 lonVal1 lonVal2
-      end
+            elev = cat(2, elev1, elev2);
+            lonVal = cat(1, lonVal1, lonVal2);
+            clear elev1 elev2 lonVal1 lonVal2
+        end
 
-   end
+    end
 else % return the whole set of longitudes
-   idColStart = 1;
-   idColEnd = length(lon);
+    idColStart = 1;
+    idColEnd = length(lon);
 
-   elev = nan(length(idLigStart:idLigEnd), length(idColStart:idColEnd));
-   for idL = idLigStart:idLigEnd
-      elev(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 idColStart-1]), fliplr([1 length(idColStart:idColEnd)]))';
-   end
+    elev = nan(length(idLigStart:idLigEnd), length(idColStart:idColEnd));
+    for idL = idLigStart:idLigEnd
+        elev(end-(idL-idLigStart), :) = netcdf.getVar(fCdf, elevVarId, fliplr([idL-1 idColStart-1]), fliplr([1 length(idColStart:idColEnd)]))';
+    end
 
-   lonVal = lon(idColStart:idColEnd);
+    lonVal = lon(idColStart:idColEnd);
 end
 
 netcdf.close(fCdf);
@@ -2513,12 +2486,12 @@ return
 %   a_julDay : julian 1950 date
 %
 % OUTPUT PARAMETERS :
-%   o_gregorianDate : gregorain date (in 'yyyy/mm/dd HH:MM' or 
+%   o_gregorianDate : gregorain date (in 'yyyy/mm/dd HH:MM' or
 %                     'yyyy/mm/dd HH:MM:SS' format)
 %
 % EXAMPLES :
 %
-% SEE ALSO : 
+% SEE ALSO :
 % AUTHORS  : Jean-Philippe Rannou (Altran)(jean-philippe.rannou@altran.com)
 % ------------------------------------------------------------------------------
 % RELEASES :
@@ -2536,10 +2509,10 @@ idOk = find(~isnan(a_julDay) & (a_julDay ~= g_decArgo_dateDef));
 [dayNum, dd, mm, yyyy, HH, MI, SS] = format_juld_dec_argo(a_julDay(idOk));
 
 for idDate = 1:length(dayNum)
-   if (a_julDay(idOk(idDate)) ~= g_decArgo_dateDef)
-      o_gregorianDate(idOk(idDate), :) = sprintf('%04d/%02d/%02d %02d:%02d:%02d', ...
-         yyyy(idDate), mm(idDate), dd(idDate), HH(idDate), MI(idDate), SS(idDate));
-   end
+    if (a_julDay(idOk(idDate)) ~= g_decArgo_dateDef)
+        o_gregorianDate(idOk(idDate), :) = sprintf('%04d/%02d/%02d %02d:%02d:%02d', ...
+            yyyy(idDate), mm(idDate), dd(idDate), HH(idDate), MI(idDate), SS(idDate));
+    end
 end
 
 return
@@ -2564,20 +2537,20 @@ return
 %
 % EXAMPLES :
 %
-% SEE ALSO : 
+% SEE ALSO :
 % AUTHORS  : Jean-Philippe Rannou (Altran)(jean-philippe.rannou@altran.com)
 % ------------------------------------------------------------------------------
 % RELEASES :
 %   01/02/2010 - RNU - creation
 % ------------------------------------------------------------------------------
 function [o_dayNum, o_day, o_month, o_year, o_hour, o_min, o_sec] = format_juld_dec_argo(a_juld)
- 
+
 % output parameters initialization
-o_dayNum = []; 
-o_day = []; 
-o_month = []; 
-o_year = [];   
-o_hour = [];   
+o_dayNum = [];
+o_day = [];
+o_month = [];
+o_year = [];
+o_hour = [];
 o_min = [];
 o_sec = [];
 
@@ -2587,35 +2560,35 @@ global g_decArgo_janFirst1950InMatlab;
 
 
 for id = 1:length(a_juld)
-   juldStr = num2str(a_juld(id), 11);
-   res = sscanf(juldStr, '%5d.%6d');
-   o_day(id) = res(1);
-   
-   if (o_day(id) ~= fix(g_decArgo_dateDef))
-      o_dayNum(id) = fix(a_juld(id));
-      
-      dateNum = o_day(id) + g_decArgo_janFirst1950InMatlab;
-      ymd = datestr(dateNum, 'yyyy/mm/dd');
-      res = sscanf(ymd, '%4d/%2d/%d');
-      o_year(id) = res(1);
-      o_month(id) = res(2);
-      o_day(id) = res(3);
+    juldStr = num2str(a_juld(id), 11);
+    res = sscanf(juldStr, '%5d.%6d');
+    o_day(id) = res(1);
 
-      hms = datestr(a_juld(id), 'HH:MM:SS');
-      res = sscanf(hms, '%d:%d:%d');
-      o_hour(id) = res(1);
-      o_min(id) = res(2);
-      o_sec(id) = res(3);
-   else
-      o_dayNum(id) = 99999;
-      o_day(id) = 99;
-      o_month(id) = 99;
-      o_year(id) = 9999;
-      o_hour(id) = 99;
-      o_min(id) = 99;
-      o_sec(id) = 99;
-   end
-   
+    if (o_day(id) ~= fix(g_decArgo_dateDef))
+        o_dayNum(id) = fix(a_juld(id));
+
+        dateNum = o_day(id) + g_decArgo_janFirst1950InMatlab;
+        ymd = datestr(dateNum, 'yyyy/mm/dd');
+        res = sscanf(ymd, '%4d/%2d/%d');
+        o_year(id) = res(1);
+        o_month(id) = res(2);
+        o_day(id) = res(3);
+
+        hms = datestr(a_juld(id), 'HH:MM:SS');
+        res = sscanf(hms, '%d:%d:%d');
+        o_hour(id) = res(1);
+        o_min(id) = res(2);
+        o_sec(id) = res(3);
+    else
+        o_dayNum(id) = 99999;
+        o_day(id) = 99;
+        o_month(id) = 99;
+        o_year(id) = 9999;
+        o_hour(id) = 99;
+        o_min(id) = 99;
+        o_sec(id) = 99;
+    end
+
 end
 
 return
@@ -2687,52 +2660,52 @@ function [range,A12,A21]=distance_lpo(lat,long,argu1,argu2);
 spheroid='wgs84';
 geodes=0;
 if (nargin >= 3),
-   if (isstr(argu1)),
-      spheroid=argu1;
-   else
-      geodes=1;
-      Ngeodes=argu1;
-      if (Ngeodes <2), error('Must have at least 2 points in a goedesic!');end;
-      if (nargin==4), spheroid=argu2; end;
-   end;
+    if (isstr(argu1)),
+        spheroid=argu1;
+    else
+        geodes=1;
+        Ngeodes=argu1;
+        if (Ngeodes <2), error('Must have at least 2 points in a goedesic!');end;
+        if (nargin==4), spheroid=argu2; end;
+    end;
 end;
 
 if (spheroid(1:3)=='sph'),
-   A = 6371000.0;
-   B = A;
-   E = sqrt(A*A-B*B)/A;
-   EPS= E*E/(1-E*E);
+    A = 6371000.0;
+    B = A;
+    E = sqrt(A*A-B*B)/A;
+    EPS= E*E/(1-E*E);
 elseif (spheroid(1:3)=='cla'),
-   A = 6378206.4E0;
-   B = 6356583.8E0;
-   E= sqrt(A*A-B*B)/A;
-   EPS = E*E/(1.-E*E);
+    A = 6378206.4E0;
+    B = 6356583.8E0;
+    E= sqrt(A*A-B*B)/A;
+    EPS = E*E/(1.-E*E);
 elseif(spheroid(1:3)=='iau'),
-   A = 6378160.e0;
-   B = 6356774.516E0;
-   E = sqrt(A*A-B*B)/A;
-   EPS = E*E/(1.-E*E);
+    A = 6378160.e0;
+    B = 6356774.516E0;
+    E = sqrt(A*A-B*B)/A;
+    EPS = E*E/(1.-E*E);
 elseif(spheroid(1:3)=='wgs'),
 
-   %c on 9/11/88, Peter Worcester gave me the constants for the
-   %c WGS84 spheroid, and he gave A (semi-major axis), F = (A-B)/A
-   %c (flattening) (where B is the semi-minor axis), and E is the
-   %c eccentricity, E = ( (A**2 - B**2)**.5 )/ A
-   %c the numbers from peter are: A=6378137.; 1/F = 298.257223563
-   %c E = 0.081819191
-   A = 6378137.;
-   E = 0.081819191;
-   B = sqrt(A.^2 - (A*E).^2);
-   EPS= E*E/(1.-E*E);
+    %c on 9/11/88, Peter Worcester gave me the constants for the
+    %c WGS84 spheroid, and he gave A (semi-major axis), F = (A-B)/A
+    %c (flattening) (where B is the semi-minor axis), and E is the
+    %c eccentricity, E = ( (A**2 - B**2)**.5 )/ A
+    %c the numbers from peter are: A=6378137.; 1/F = 298.257223563
+    %c E = 0.081819191
+    A = 6378137.;
+    E = 0.081819191;
+    B = sqrt(A.^2 - (A*E).^2);
+    EPS= E*E/(1.-E*E);
 
 else
-   error('dist: Unknown spheroid specified!');
+    error('dist: Unknown spheroid specified!');
 end;
 
 
 NN=max(size(lat));
 if (NN ~= max(size(long))),
-   error('dist: Lat, Long vectors of different sizes!');
+    error('dist: Lat, Long vectors of different sizes!');
 end
 
 if (NN==size(lat)), rowvec=0;  % It is easier if things are column vectors,
@@ -2751,15 +2724,15 @@ XLAM2=long(2:NN);
 
 % wiggle lines of constant lat to prevent numerical probs.
 if (any(PHI1==PHI2)),
-   for ii=1:NN-1,
-      if (PHI1(ii)==PHI2(ii)), PHI2(ii)=PHI2(ii)+ 1e-14; end;
-   end;
+    for ii=1:NN-1,
+        if (PHI1(ii)==PHI2(ii)), PHI2(ii)=PHI2(ii)+ 1e-14; end;
+    end;
 end;
 % wiggle lines of constant long to prevent numerical probs.
 if (any(XLAM1==XLAM2)),
-   for ii=1:NN-1,
-      if (XLAM1(ii)==XLAM2(ii)), XLAM2(ii)=XLAM2(ii)+ 1e-14; end;
-   end;
+    for ii=1:NN-1,
+        if (XLAM1(ii)==XLAM2(ii)), XLAM2(ii)=XLAM2(ii)+ 1e-14; end;
+    end;
 end;
 
 
@@ -2788,7 +2761,7 @@ A21P=atan((1.)./CTA21P);
 
 %C    GET THE QUADRANT RIGHT
 DLAM2=(abs(DLAM)<pi).*DLAM + (DLAM>=pi).*(-2*pi+DLAM) + ...
-   (DLAM<=-pi).*(2*pi+DLAM);
+    (DLAM<=-pi).*(2*pi+DLAM);
 A12=A12+(A12<-pi)*2*pi-(A12>=pi)*2*pi;
 A12=A12+pi*sign(-A12).*( sign(A12) ~= sign(DLAM2) );
 A21P=A21P+(A21P<-pi)*2*pi-(A21P>=pi)*2*pi;
@@ -2806,7 +2779,7 @@ SSIG=sin(DLAM).*cos(PSI2)./sin(A12);
 dd2=[cos(long).*cos(lat) sin(long).*cos(lat) sin(lat)];
 dd2=sum((diff(dd2).*diff(dd2))')';
 if ( any(abs(dd2-2) < 2*((B-A)/A))^2 ),
-   disp('dist: Warning...point(s) too close to 90 degrees apart');
+    disp('dist: Warning...point(s) too close to 90 degrees apart');
 end;
 bigbrnch=dd2>2;
 
@@ -2832,104 +2805,150 @@ range=xnu1.*SIG.*(1.0+TERM1+TERM2+TERM3+TERM4);
 
 if (geodes),
 
-   %c now calculate the locations along the ray path. (for extra accuracy, could
-   %c do it from start to halfway, then from end for the rest, switching from A12
-   %c to A21...
-   %c started to use Rudoe's formula, page 117 in Bomford...(1980, fourth edition)
-   %c but then went to Clarke's best formula (pg 118)
+    %c now calculate the locations along the ray path. (for extra accuracy, could
+    %c do it from start to halfway, then from end for the rest, switching from A12
+    %c to A21...
+    %c started to use Rudoe's formula, page 117 in Bomford...(1980, fourth edition)
+    %c but then went to Clarke's best formula (pg 118)
 
-   %RP I am doing this twice because this formula doesn't work when we go
-   %past 90 degrees!
-   Ngd1=round(Ngeodes/2);
+    %RP I am doing this twice because this formula doesn't work when we go
+    %past 90 degrees!
+    Ngd1=round(Ngeodes/2);
 
-   % First time...away from point 1
-   if (Ngd1>1),
-      wns=ones(1,Ngd1);
-      CP1CA12 = (cos(PHI1).*cos(A12)).^2;
-      R2PRM = -EPS.*CP1CA12;
-      R3PRM = 3.0*EPS.*(1.0-R2PRM).*cos(PHI1).*sin(PHI1).*cos(A12);
-      C1 = R2PRM.*(1.0+R2PRM)/6.0*wns;
-      C2 = R3PRM.*(1.0+3.0*R2PRM)/24.0*wns;
-      R2PRM=R2PRM*wns;
-      R3PRM=R3PRM*wns;
+    % First time...away from point 1
+    if (Ngd1>1),
+        wns=ones(1,Ngd1);
+        CP1CA12 = (cos(PHI1).*cos(A12)).^2;
+        R2PRM = -EPS.*CP1CA12;
+        R3PRM = 3.0*EPS.*(1.0-R2PRM).*cos(PHI1).*sin(PHI1).*cos(A12);
+        C1 = R2PRM.*(1.0+R2PRM)/6.0*wns;
+        C2 = R3PRM.*(1.0+3.0*R2PRM)/24.0*wns;
+        R2PRM=R2PRM*wns;
+        R3PRM=R3PRM*wns;
 
-      %c  now have to loop over positions
-      RLRAT = (range./xnu1)*([0:Ngd1-1]/(Ngeodes-1));
+        %c  now have to loop over positions
+        RLRAT = (range./xnu1)*([0:Ngd1-1]/(Ngeodes-1));
 
-      THETA = RLRAT.*(1 - (RLRAT.^2).*(C1 - C2.*RLRAT));
-      C3 = 1.0 - (R2PRM.*(THETA.^2))/2.0 - (R3PRM.*(THETA.^3))/6.0;
-      DSINPSI =(sin(PHI1)*wns).*cos(THETA) + ...
-         ((cos(PHI1).*cos(A12))*wns).*sin(THETA);
-      %try to identify the branch...got to other branch if range> 1/4 circle
-      PSI = asin(DSINPSI);
+        THETA = RLRAT.*(1 - (RLRAT.^2).*(C1 - C2.*RLRAT));
+        C3 = 1.0 - (R2PRM.*(THETA.^2))/2.0 - (R3PRM.*(THETA.^3))/6.0;
+        DSINPSI =(sin(PHI1)*wns).*cos(THETA) + ...
+            ((cos(PHI1).*cos(A12))*wns).*sin(THETA);
+        %try to identify the branch...got to other branch if range> 1/4 circle
+        PSI = asin(DSINPSI);
 
-      DCOSPSI = cos(PSI);
-      DSINDLA = (sin(A12)*wns).*sin(THETA)./DCOSPSI;
-      DTANPHI=(1.0+EPS)*(1.0 - (E^2)*C3.*(sin(PHI1)*wns)./DSINPSI).*tan(PSI);
-      %C compute output latitude (phi) and long (xla) in radians
-      %c I believe these are absolute, and don't need source coords added
-      PHI = atan(DTANPHI);
-      %  fix branch cut stuff -
-      otherbrcnh= sign(DLAM2*wns) ~= sign([sign(DLAM2) diff(DSINDLA')'] );
-      XLA = XLAM1*wns + asin(DSINDLA).*(otherbrcnh==0) + ...
-         (pi-asin(DSINDLA)).*(otherbrcnh);
-   else
-      PHI=PHI1;
-      XLA=XLAM1;
-   end;
+        DCOSPSI = cos(PSI);
+        DSINDLA = (sin(A12)*wns).*sin(THETA)./DCOSPSI;
+        DTANPHI=(1.0+EPS)*(1.0 - (E^2)*C3.*(sin(PHI1)*wns)./DSINPSI).*tan(PSI);
+        %C compute output latitude (phi) and long (xla) in radians
+        %c I believe these are absolute, and don't need source coords added
+        PHI = atan(DTANPHI);
+        %  fix branch cut stuff -
+        otherbrcnh= sign(DLAM2*wns) ~= sign([sign(DLAM2) diff(DSINDLA')'] );
+        XLA = XLAM1*wns + asin(DSINDLA).*(otherbrcnh==0) + ...
+            (pi-asin(DSINDLA)).*(otherbrcnh);
+    else
+        PHI=PHI1;
+        XLA=XLAM1;
+    end;
 
-   % Now we do the same thing, but in the reverse direction from the receiver!
-   if (Ngeodes-Ngd1>1),
-      wns=ones(1,Ngeodes-Ngd1);
-      CP2CA21 = (cos(PHI2).*cos(A21)).^2;
-      R2PRM = -EPS.*CP2CA21;
-      R3PRM = 3.0*EPS.*(1.0-R2PRM).*cos(PHI2).*sin(PHI2).*cos(A21);
-      C1 = R2PRM.*(1.0+R2PRM)/6.0*wns;
-      C2 = R3PRM.*(1.0+3.0*R2PRM)/24.0*wns;
-      R2PRM=R2PRM*wns;
-      R3PRM=R3PRM*wns;
+    % Now we do the same thing, but in the reverse direction from the receiver!
+    if (Ngeodes-Ngd1>1),
+        wns=ones(1,Ngeodes-Ngd1);
+        CP2CA21 = (cos(PHI2).*cos(A21)).^2;
+        R2PRM = -EPS.*CP2CA21;
+        R3PRM = 3.0*EPS.*(1.0-R2PRM).*cos(PHI2).*sin(PHI2).*cos(A21);
+        C1 = R2PRM.*(1.0+R2PRM)/6.0*wns;
+        C2 = R3PRM.*(1.0+3.0*R2PRM)/24.0*wns;
+        R2PRM=R2PRM*wns;
+        R3PRM=R3PRM*wns;
 
-      %c  now have to loop over positions
-      RLRAT = (range./xnu2)*([0:Ngeodes-Ngd1-1]/(Ngeodes-1));
+        %c  now have to loop over positions
+        RLRAT = (range./xnu2)*([0:Ngeodes-Ngd1-1]/(Ngeodes-1));
 
-      THETA = RLRAT.*(1 - (RLRAT.^2).*(C1 - C2.*RLRAT));
-      C3 = 1.0 - (R2PRM.*(THETA.^2))/2.0 - (R3PRM.*(THETA.^3))/6.0;
-      DSINPSI =(sin(PHI2)*wns).*cos(THETA) + ...
-         ((cos(PHI2).*cos(A21))*wns).*sin(THETA);
-      %try to identify the branch...got to other branch if range> 1/4 circle
-      PSI = asin(DSINPSI);
+        THETA = RLRAT.*(1 - (RLRAT.^2).*(C1 - C2.*RLRAT));
+        C3 = 1.0 - (R2PRM.*(THETA.^2))/2.0 - (R3PRM.*(THETA.^3))/6.0;
+        DSINPSI =(sin(PHI2)*wns).*cos(THETA) + ...
+            ((cos(PHI2).*cos(A21))*wns).*sin(THETA);
+        %try to identify the branch...got to other branch if range> 1/4 circle
+        PSI = asin(DSINPSI);
 
-      DCOSPSI = cos(PSI);
-      DSINDLA = (sin(A21)*wns).*sin(THETA)./DCOSPSI;
-      DTANPHI=(1.0+EPS)*(1.0 - (E^2)*C3.*(sin(PHI2)*wns)./DSINPSI).*tan(PSI);
-      %C compute output latitude (phi) and long (xla) in radians
-      %c I believe these are absolute, and don't need source coords added
-      PHI = [PHI fliplr(atan(DTANPHI))];
-      % fix branch cut stuff
-      otherbrcnh= sign(-DLAM2*wns) ~= sign( [sign(-DLAM2) diff(DSINDLA')'] );
-      XLA = [XLA fliplr(XLAM2*wns + asin(DSINDLA).*(otherbrcnh==0) + ...
-         (pi-asin(DSINDLA)).*(otherbrcnh))];
-   else
-      PHI = [PHI PHI2];
-      XLA = [XLA XLAM2];
-   end;
+        DCOSPSI = cos(PSI);
+        DSINDLA = (sin(A21)*wns).*sin(THETA)./DCOSPSI;
+        DTANPHI=(1.0+EPS)*(1.0 - (E^2)*C3.*(sin(PHI2)*wns)./DSINPSI).*tan(PSI);
+        %C compute output latitude (phi) and long (xla) in radians
+        %c I believe these are absolute, and don't need source coords added
+        PHI = [PHI fliplr(atan(DTANPHI))];
+        % fix branch cut stuff
+        otherbrcnh= sign(-DLAM2*wns) ~= sign( [sign(-DLAM2) diff(DSINDLA')'] );
+        XLA = [XLA fliplr(XLAM2*wns + asin(DSINDLA).*(otherbrcnh==0) + ...
+            (pi-asin(DSINDLA)).*(otherbrcnh))];
+    else
+        PHI = [PHI PHI2];
+        XLA = [XLA XLAM2];
+    end;
 
-   %c convert to degrees
-   A12 = PHI*180/pi;
-   A21 = XLA*180/pi;
-   range=range*([0:Ngeodes-1]/(Ngeodes-1));
+    %c convert to degrees
+    A12 = PHI*180/pi;
+    A21 = XLA*180/pi;
+    range=range*([0:Ngeodes-1]/(Ngeodes-1));
 
 
 else
 
-   %C*** CONVERT TO DECIMAL DEGREES
-   A12=A12*180/pi;
-   A21=A21*180/pi;
-   if (rowvec),
-      range=range';
-      A12=A12';
-      A21=A21';
-   end;
+    %C*** CONVERT TO DECIMAL DEGREES
+    A12=A12*180/pi;
+    A21=A21*180/pi;
+    if (rowvec),
+        range=range';
+        A12=A12';
+        A21=A21';
+    end;
 end;
 
 return
+
+function cfg = load_configuration(filename)
+
+% LOAD_CONFIGURATION Load parameters from a config file
+%
+%   CFG = LOAD_CONFIGURATION(FILENAME) reads KEY=VALUE pairs from the file.
+%   Numeric values are converted; others are strings.
+%   Lines starting with '#' or empty lines are ignored.
+%   Usage:
+%       cfg = load_configuration('config.txt');
+%       addpath(cfg.PATH_NAME);    fid = fopen(filename, 'r');
+%--------------------------------------------------------------------------
+
+fid = fopen(filename, 'r');
+
+if fid == -1
+    error('Cannot open configuration file: %s', filename);
+end
+
+cfg = struct();
+
+while ~feof(fid)
+    line = strtrim(fgetl(fid));
+
+    % Skip empty lines or comments
+    if isempty(line) || startsWith(line, '%')
+        continue
+    end
+
+    % Split at '='
+    tokens = strsplit(line, '=');
+    key = strtrim(tokens{1});
+    value = strtrim(tokens{2});
+
+    % Try converting to number
+    num = str2double(value);
+    if ~isnan(num)
+        cfg.(key) = num;         % store as number
+    else
+        cfg.(key) = value;       % keep as string
+    end
+end
+
+fclose(fid);
+return
+
