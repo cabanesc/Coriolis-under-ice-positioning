@@ -434,7 +434,7 @@ for idLoop = 1:2
 
     % increase range until the path is found
     for range = g_estProfLoc_firstRange:g_estProfLoc_rangePeriod:g_estProfLoc_lastRange
-
+tic
         if (idLoop == 1)
             fprintf('   Trying forward with RANGE = %d', range);
         else
@@ -450,7 +450,7 @@ for idLoop = 1:2
         lonTabAll = nan(nbLig, nbCol);
         latTabAll = nan(nbLig, nbCol);
         for idC = 1:length(longitude)-1
-
+idC
             % create the set of locations on the search segment
             [lonTab, latTab] = get_loc_on_search_range(longitude([idC idC+1]), latitude([idC idC+1]), idC*range, tetaDeg);
             if (any((lonTab < -180) | (lonTab >= 360) | ...
@@ -482,7 +482,9 @@ for idLoop = 1:2
             lonTabAll((nbCol-(idC+1))*range+(1:length(depthVal)), idC+1) = lonTab;
             latTabAll((nbCol-(idC+1))*range+(1:length(depthVal)), idC+1) = latTab;
         end
+toc
 
+tic
         % try to find a path
         result = nan(length(longitude), 1);
         curId = (nbCol-1)*range + 1;
@@ -508,7 +510,7 @@ for idLoop = 1:2
                 curId = result(idC);
             end
         end
-
+toc
         if (idLoop == 1)
             dir = 'Foreward';
             dir2 = '1_foreward';
@@ -542,14 +544,19 @@ for idLoop = 1:2
         % arrays to store legend information
         legendPlots = [];
         legendLabels = [];
-
+tic
         idDone = find(devTabFlag == 2);
         [lonMin, lonMax, latMin, latMax] = compute_geo_extrema( ...
             [], [longitudeOri lonTabAll(idDone)'], [latitudeOri latTabAll(idDone)'], 0);
-        [elevC, lonC , latC] = get_gebco_elev_zone(lonMin, lonMax, latMin, latMax, a_gebcoFilePathName);
-
+       
+        %[cc 12/2025....>
+        %         [elevC, lonC , latC] = get_gebco_elev_zone(lonMin, lonMax, latMin, latMax, a_gebcoFilePathName);
+        %... cc 12/2025]
+       
         cla;
+toc
 
+tic
         m_proj('mercator', 'latitudes', [latMin latMax], 'longitudes', [lonMin lonMax]);
         m_grid('box', 'fancy', 'tickdir', 'out', 'linestyle', 'none');
         hold on;
@@ -559,7 +566,13 @@ for idLoop = 1:2
         if (length(isobath) == 1)
             isobath = [isobath isobath];
         end
-        [contourMatrix, contourHdl] = m_contour(lonC, latC, elevC, isobath, 'c');
+
+        %[cc 12/2025....>
+        %         [contourMatrix, contourHdl] = m_contour(lonC, latC, elevC, isobath, 'c');
+        [contourMatrix, contourHdl] = m_etopo2('contour',isobath);
+        contourHdl.LineColor='c';
+        %... cc 12/2025]
+        
         if (~isempty(contourMatrix))
             legendPlots = [legendPlots contourHdl];
             legendLabels = [legendLabels {'depth constraint isobath'}];
@@ -574,7 +587,7 @@ for idLoop = 1:2
             legendPlots = [legendPlots plotHdl];
             legendLabels = [legendLabels {'starting location'}];
         end
-
+toc
         for idC = 1:length(longitude)-1
             lonT = lonTabAll(:, idC+1);
             latT = latTabAll(:, idC+1);
@@ -641,7 +654,9 @@ for idLoop = 1:2
         if (done)
             break
         end
+
     end
+    
 end
 
 % plot final trajectory
@@ -663,7 +678,9 @@ if (done)
 
     [lonMin, lonMax, latMin, latMax] = compute_geo_extrema( ...
         [], [longitudeOri resultF(:, 1)' resultB(:, 1)'], [latitudeOri resultF(:, 2)' resultB(:, 2)'], 0);
-    [elevC, lonC , latC] = get_gebco_elev_zone(lonMin, lonMax, latMin, latMax, a_gebcoFilePathName);
+    %[cc 12/2025....>
+%     [elevC, lonC , latC] = get_gebco_elev_zone(lonMin, lonMax, latMin, latMax, a_gebcoFilePathName);
+    %... cc 12/2025]
 
     cla;
 
@@ -676,7 +693,12 @@ if (done)
     if (length(isobath) == 1)
         isobath = [isobath isobath];
     end
-    m_contour(lonC, latC, elevC, isobath, 'c');
+
+    %[cc 12/2025....>
+%     m_contour(lonC, latC, elevC, isobath, 'c');
+    [contourMatrix, contourHdl] = m_etopo2('contour',isobath);
+    contourHdl.LineColor='c';
+    %... cc 12/2025]
 
     m_line([longitude(1) longitude(end)], [latitude(1) latitude(end)], 'linestyle', '-', 'visible', 'on');
 
