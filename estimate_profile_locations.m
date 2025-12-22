@@ -25,7 +25,7 @@
 % ------------------------------------------------------------------------------
 function estimate_profile_locations(varargin)
 
-% [cc 12/2025--->
+% [cc 12/2025  PR1--->
 % load configuration parameters
 
 if exist('config.txt')
@@ -241,13 +241,17 @@ for idS = 1:length(startIdList)
     idStop = stopIdList(idS);
 
     % interpolate the locations
-    [lonInter, latInter] = interpolate_between_2_locations(...
+    % [cc 12/2025 PR2 ...>
+    %[lonInter, latInter] = interpolate_between_2_locations(...
+    [lonInter, latInter] = interpolate_between_2_locations_geo(...
         a_floatData.juldLocation(idStart), a_floatData.longitude(idStart), a_floatData.latitude(idStart), ...
         a_floatData.juldLocation(idStop), a_floatData.longitude(idStop), a_floatData.latitude(idStop), ...
         a_floatData.juldLocation(idStart+1:idStop-1)');
+    % ... cc 12/2025]
     a_floatData.longitude(idStart+1:idStop-1) = lonInter';
     a_floatData.latitude(idStart+1:idStop-1) = latInter';
     a_floatData.positionQc(idStart+1:idStop-1) = g_decArgo_qcInterpolated;
+   
 end
 
 % compute speeds
@@ -549,7 +553,7 @@ tic
         [lonMin, lonMax, latMin, latMax] = compute_geo_extrema( ...
             [], [longitudeOri lonTabAll(idDone)'], [latitudeOri latTabAll(idDone)'], 0);
        
-        %[cc 12/2025....>
+        %[cc 12/2025 PR1....>
         %         [elevC, lonC , latC] = get_gebco_elev_zone(lonMin, lonMax, latMin, latMax, a_gebcoFilePathName);
         %... cc 12/2025]
        
@@ -567,7 +571,7 @@ tic
             isobath = [isobath isobath];
         end
 
-        %[cc 12/2025....>
+        %[cc 12/2025 PR1....>
         %         [contourMatrix, contourHdl] = m_contour(lonC, latC, elevC, isobath, 'c');
         [contourMatrix, contourHdl] = m_etopo2('contour',isobath);
         contourHdl.LineColor='c';
@@ -678,7 +682,7 @@ if (done)
 
     [lonMin, lonMax, latMin, latMax] = compute_geo_extrema( ...
         [], [longitudeOri resultF(:, 1)' resultB(:, 1)'], [latitudeOri resultF(:, 2)' resultB(:, 2)'], 0);
-    %[cc 12/2025....>
+    %[cc 12/2025 PR1....>
 %     [elevC, lonC , latC] = get_gebco_elev_zone(lonMin, lonMax, latMin, latMax, a_gebcoFilePathName);
     %... cc 12/2025]
 
@@ -694,7 +698,7 @@ if (done)
         isobath = [isobath isobath];
     end
 
-    %[cc 12/2025....>
+    %[cc 12/2025 PR1....>
 %     m_contour(lonC, latC, elevC, isobath, 'c');
     [contourMatrix, contourHdl] = m_etopo2('contour',isobath);
     contourHdl.LineColor='c';
@@ -2026,6 +2030,55 @@ end
 o_interpLocLat = interp1q([a_firstLocDate; a_secondLocDate], [a_firstLocLat; a_secondLocLat], a_interpDate);
 
 return
+
+% [cc 12/2025 PR2...>
+%--------------------------------------------------------------
+function [o_interpLon, o_interpLat] = interpolate_between_2_locations_geo( ...
+    t1, lon1, lat1, t2, lon2, lat2, tInterp)
+% ------------------------------------------------------------
+% Interpolate between two geographic locations using a geodesic
+% (WGS84 ellipsoid) instead of linear lat/lon interpolation.
+% ------------------------------------------------------------
+
+% Output initialization
+o_interpLon = [];
+o_interpLat = [];
+
+
+% Fraction of time between the two fixes
+f = (tInterp - t1) / (t2 - t1);
+
+% If time exactly matches one endpoint
+if f <= 0
+    o_interpLon = lon1;
+    o_interpLat = lat1;
+    return
+elseif f >= 1
+    o_interpLon = lon2;
+    o_interpLat = lat2;
+    return
+end
+
+% ------------------------------------------------------------
+% Geodesic calculation using WGS84 ellipsoid
+% ------------------------------------------------------------
+
+% Compute geodesic distance and azimuth from point 1 to point 2
+ellipsoid = wgs84Ellipsoid('kilometer');
+
+[dist12, az12] = distance(lat1, lon1, lat2, lon2, ellipsoid); % distance in km
+
+% Distance to travel along the geodesic
+dInterp = f * dist12;
+
+% Move from point 1 along the geodesic
+[o_interpLat, o_interpLon] = reckon(lat1, lon1, dInterp, az12, ellipsoid);
+
+
+return
+
+% ... cc 12/2025]
+
 
 % ------------------------------------------------------------------------------
 % Compute geographic boundaries to plot a set of locations.
