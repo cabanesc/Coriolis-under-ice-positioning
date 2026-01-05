@@ -42,9 +42,20 @@ LAST_RANGE = 250
 % range period (in kilometers)
 RANGE_PERIOD = 10
 
+% Azimuth mode for defining search locations:
+% 'local'    : normal to the instantaneous direction of the initial path (default)
+% 'parallel' : normal to a direction obtained by parallel transport from
+%              the geodesic connecting the first and last path points
+% Both options are equivalent when the initial path is a geodesic.
+AZIMUTH_MODE = local
+
+% Absolute latitude (degrees) above which a stereographic projection is used for map plotting
+LAT_THRESHOLD = 60;
+
 % plot types
 PLOT_PNG = 1
 PLOT_PDF = 1
+
 
 % CONFIGURATION - END
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
