@@ -43,8 +43,8 @@ LAST_RANGE = 250
 RANGE_PERIOD = 10
 
 % Azimuth mode for defining search locations:
-% 'local'    : normal to the instantaneous direction of the initial path (default)
-% 'parallel' : normal to a direction obtained by parallel transport from
+% local    : normal to the instantaneous direction of the initial path (default)
+% parallel : normal to a direction obtained by parallel transport from
 %              the geodesic connecting the first and last path points
 % Both options are equivalent when the initial path is a geodesic.
 AZIMUTH_MODE = local

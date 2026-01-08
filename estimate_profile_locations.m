@@ -1786,6 +1786,18 @@ return
 
 function [o_lon, o_lat] = get_loc_on_search_range_geo(a_lon, a_lat, a_range, longitude, latitude, azimuthMode)
 
+if exist('distance','file')&exist('reckon','file')&exist('azimuth','file') % if mapping toolbox available
+    [o_lon, o_lat] = get_loc_on_search_range_geo1(a_lon, a_lat, a_range, longitude, latitude, azimuthMode);
+else
+    [o_lon, o_lat] = get_loc_on_search_range_geo2(a_lon, a_lat, a_range, longitude, latitude, azimuthMode);
+end
+
+return
+% -----------------------
+% 1: use mapping toolbox
+% -----------------------
+function [o_lon, o_lat] = get_loc_on_search_range_geo1(a_lon, a_lat, a_range, longitude, latitude, azimuthMode)
+
 if nargin < 6 || isempty(azimuthMode)
     azimuthMode = 'local';
 end
@@ -1871,6 +1883,179 @@ az_deg = mod(az_deg, 360);
 
 return
 
+% ------------------------------------------------------------
+% 2: does not require mapping toolbox
+% ------------------------------------------------------------
+
+function [o_lon, o_lat] = get_loc_on_search_range_geo2( ...
+    a_lon, a_lat, a_range, longitude, latitude, azimuthMode)
+
+
+if nargin < 6 || isempty(azimuthMode)
+    azimuthMode = 'local';
+end
+
+% Reference point P (middle of the local segment)
+lat0 = a_lat(2);
+lon0 = a_lon(2);
+
+% ------------------------------------------------------------
+% Compute azimuth at P
+% ------------------------------------------------------------
+switch lower(azimuthMode)
+
+    case 'local'
+        % Local azimuth of the trajectory tangent (A1 -> A2)
+        [~, az] = distance_lpo( ...
+            [a_lat(1) a_lat(2)], ...
+            [a_lon(1) a_lon(2)], ...
+            'wgs84');
+        az = az(1);   % forward azimuth in degrees
+
+    case 'parallel'
+        % Azimuth parallel-transported from the global geodesic
+        az = azimuth_parallel_gc_lpo( ...
+            latitude(1), longitude(1), ...
+            latitude(end), longitude(end), ...
+            lat0, lon0)
+         az1 = azimuth_parallel_gc( ...
+            latitude(1), longitude(1), ...
+            latitude(end), longitude(end), ...
+            lat0, lon0)
+
+    otherwise
+        error('Unknown azimuthMode: %s', azimuthMode);
+end
+
+% ------------------------------------------------------------
+% Normal azimuths (right / left)
+% ------------------------------------------------------------
+normalR = mod(az + 90, 360);
+normalL = mod(az - 90, 360);
+
+%------------------------------------------------------------
+% Distances along normal directions (meters)
+% ------------------------------------------------------------
+dist_m = (1:a_range) * 1000;   % 1 km increments
+
+% ------------------------------------------------------------
+% Compute points along normals using distance_lpo
+% ------------------------------------------------------------
+% Build small geodesics from P along each normal direction
+
+latR = zeros(1, a_range);
+lonR = zeros(1, a_range);
+latL = zeros(1, a_range);
+lonL = zeros(1, a_range);
+
+for k = 1:a_range
+    % Right side
+    [~, lat_tmp, lon_tmp] = distance_lpo( ...
+        [lat0 lat0], [lon0 lon0], 2, 'wgs84');
+    [latR(k), lonR(k)] = reckon_vincenty(lat0, lon0, dist_m(k), normalR);
+
+    % Left side
+    [latL(k), lonL(k)] = reckon_vincenty(lat0, lon0, dist_m(k), normalL);
+end
+
+% ------------------------------------------------------------
+% Assemble output (left → center → right)
+% ------------------------------------------------------------
+o_lat = [fliplr(latL) lat0 latR];
+o_lon = [fliplr(lonL) lon0 lonR];
+
+return
+
+function az_deg = azimuth_parallel_gc_lpo(latA, lonA, latB, lonB, latP, lonP)
+% ------------------------------------------------------------
+% Local azimuth at point P of a direction parallel-transported
+% from the geodesic AB (WGS84).
+% ------------------------------------------------------------
+
+% Initial azimuth of reference geodesic A → B
+[~, azAB] = distance_lpo([latA latB], [lonA lonB], 'wgs84');
+azAB = azAB(1);
+
+% Degrees to radians
+d2r = pi/180;
+phiA = latA * d2r;
+phiP = latP * d2r;
+lamA = lonA * d2r;
+lamP = lonP * d2r;
+
+% Parallel transport on ellipsoid (Levi-Civita, first order)
+GammaA = lamA .* sin(phiA);
+GammaP = lamP .* sin(phiP);
+
+az_deg = azAB + rad2deg(GammaP - GammaA);
+az_deg = mod(az_deg, 360);
+
+return
+
+function [lat2, lon2] = reckon_vincenty(lat1, lon1, s, az)
+% ------------------------------------------------------------
+% Vincenty direct formula (WGS84)
+% Moves from (lat1, lon1) along azimuth az for distance s (meters)
+% No Mapping Toolbox required
+% ------------------------------------------------------------
+
+% WGS84
+a = 6378137.0;
+f = 1/298.257223563;
+b = a * (1 - f);
+
+% Degrees to radians
+d2r = pi/180;
+phi1 = lat1 * d2r;
+lambda1 = lon1 * d2r;
+alpha1 = az * d2r;
+
+U1 = atan((1 - f) * tan(phi1));
+sinU1 = sin(U1);
+cosU1 = cos(U1);
+
+sinAlpha1 = sin(alpha1);
+cosAlpha1 = cos(alpha1);
+
+sinAlpha = cosU1 * sinAlpha1;
+cos2Alpha = 1 - sinAlpha^2;
+
+u2 = cos2Alpha * (a^2 - b^2) / b^2;
+A = 1 + u2/16384*(4096 + u2*(-768 + u2*(320 - 175*u2)));
+B = u2/1024*(256 + u2*(-128 + u2*(74 - 47*u2)));
+
+sigma = s / (b * A);
+sigmaP = 2*pi;
+
+while abs(sigma - sigmaP) > 1e-12
+    cos2SigmaM = cos(2*atan2(tan(U1),cosAlpha1) + sigma);
+    sinSigma = sin(sigma);
+    cosSigma = cos(sigma);
+    deltaSigma = B*sinSigma*(cos2SigmaM + ...
+        B/4*(cosSigma*(-1 + 2*cos2SigmaM^2) - ...
+        B/6*cos2SigmaM*(-3 + 4*sinSigma^2)*(-3 + 4*cos2SigmaM^2)));
+    sigmaP = sigma;
+    sigma = s/(b*A) + deltaSigma;
+end
+
+phi2 = atan2( ...
+    sinU1*cosSigma + cosU1*sinSigma*cosAlpha1, ...
+    (1 - f)*sqrt(sinAlpha^2 + ...
+    (sinU1*sinSigma - cosU1*cosSigma*cosAlpha1)^2));
+
+lambda = atan2( ...
+    sinSigma*sinAlpha1, ...
+    cosU1*cosSigma - sinU1*sinSigma*cosAlpha1);
+
+C = f/16*cos2Alpha*(4 + f*(4 - 3*cos2Alpha));
+L = lambda - (1 - C)*f*sinAlpha * ...
+    (sigma + C*sinSigma*(cos2SigmaM + ...
+    C*cosSigma*(-1 + 2*cos2SigmaM^2)));
+
+lon2 = (lambda1 + L) / d2r;
+lat2 = phi2 / d2r;
+
+return
 
 % ------ cc 12/2025 PR2]
 
@@ -2188,13 +2373,34 @@ o_interpLocLat = interp1q([a_firstLocDate; a_secondLocDate], [a_firstLocLat; a_s
 
 return
 
+
+
+
 % [cc 12/2025 PR2...>
 %--------------------------------------------------------------
+
 function [o_interpLon, o_interpLat] = interpolate_between_2_locations_geo( ...
     t1, lon1, lat1, t2, lon2, lat2, tInterp)
 % ------------------------------------------------------------
 % Interpolate between two geographic locations using a geodesic
 % (WGS84 ellipsoid) instead of linear lat/lon interpolation.
+% ------------------------------------------------------------
+if exist('distance','file')&exist('reckon','file')&exist('azimuth','file')
+     [o_interpLon, o_interpLat] = interpolate_between_2_locations_geo1( ...
+    t1, lon1, lat1, t2, lon2, lat2, tInterp);
+else
+    [o_interpLon, o_interpLat] = interpolate_between_2_locations_geo2( ...
+    t1, lon1, lat1, t2, lon2, lat2, tInterp);
+end
+
+return
+
+function [o_interpLon, o_interpLat] = interpolate_between_2_locations_geo1( ...
+    t1, lon1, lat1, t2, lon2, lat2, tInterp)
+% ------------------------------------------------------------
+% Interpolate between two geographic locations using a geodesic
+% (WGS84 ellipsoid) instead of linear lat/lon interpolation.
+% use mapping toolbox
 % ------------------------------------------------------------
 
 % Output initialization
@@ -2231,6 +2437,49 @@ dInterp = f * dist12;
 % Move from point 1 along the geodesic
 [o_interpLat, o_interpLon] = reckon(lat1, lon1, dInterp, az12, ellipsoid);
 
+
+return
+
+
+function [o_interpLon, o_interpLat] = interpolate_between_2_locations_geo2( ...
+    t1, lon1, lat1, t2, lon2, lat2, tInterp)
+% ------------------------------------------------------------
+% Interpolate between two geographic locations using a geodesic
+% (WGS84 ellipsoid) instead of linear lat/lon interpolation.
+% does not require mapping toolbox
+% use distance_lpo
+% ------------------------------------------------------------
+
+% Ensure column vector
+tInterp = tInterp(:);
+
+% Fraction of time
+f = (tInterp - t1) / (t2 - t1);
+
+% Clamp
+f = max(0, min(1, f));
+
+% ------------------------------------------------------------
+% Choose N based on temporal sampling
+% ------------------------------------------------------------
+Nt = numel(tInterp);
+oversample = 3;                 % user-tunable
+N = max(2, oversample * Nt);
+
+% ------------------------------------------------------------
+% Compute geodesic
+% ------------------------------------------------------------
+[~, lat_gd, lon_gd] = distance_lpo( ...
+    [lat1 lat2], [lon1 lon2], N, 'wgs84');
+
+% ------------------------------------------------------------
+% Map time fraction to geodesic index
+%------------------------------------------------------------
+idx = round(1 + f * (N-1));
+idx = max(1, min(N, idx));
+
+o_interpLat = lat_gd(idx);
+o_interpLon = lon_gd(idx);
 
 return
 
