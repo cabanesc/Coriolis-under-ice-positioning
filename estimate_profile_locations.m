@@ -441,6 +441,9 @@ for idLoop = 1:2
         longitude = fliplr(longitude);
         latitude = fliplr(latitude);
         depthConstraint = fliplr(depthConstraint);
+        %[cc 12/2025 PR3....>
+        grounded = fliplr(grounded);
+        % ... cc 12/2025]
     end
 
     % increase range until the path is found
@@ -689,7 +692,15 @@ toc
     end
     
 end
-
+%[cc 12/2025 PR3....> go back to original variables after backward
+% computation
+if (idLoop == 2)
+    longitude = fliplr(longitude);
+    latitude = fliplr(latitude);
+    depthConstraint = fliplr(depthConstraint);
+    grounded = fliplr(grounded);
+end
+%... cc 12/2025 ]
 % plot final trajectory
 if (done)
 
