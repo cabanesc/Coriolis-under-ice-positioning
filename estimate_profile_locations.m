@@ -25,7 +25,7 @@
 % ------------------------------------------------------------------------------
 function estimate_profile_locations(varargin)
 
-% [cc 12/2025  PR1--->
+% [cc 12/2025  --->
 % load configuration parameters
 
 if exist('config.txt')
@@ -63,6 +63,7 @@ global g_estProfLoc_plotPdf;
 
 global g_estProfLoc_azimuthMode; % cc 12/2025 PR2
 global g_estProfLoc_latThreshold; % cc 12/2025 PR2
+global g_estProfLoc_initPathMode; % cc 01/2026 PR3
 
 g_estProfLoc_version = '1.1';
 g_estProfLoc_diffDepthToStart = cfg.DIFF_DEPTH_TO_START;
@@ -75,6 +76,7 @@ g_estProfLoc_plotPng = cfg.PLOT_PNG;
 g_estProfLoc_plotPdf = cfg.PLOT_PDF;
 g_estProfLoc_azimuthMode = cfg.AZIMUTH_MODE;
 g_estProfLoc_latThreshold = cfg.LAT_THRESHOLD;
+g_estProfLoc_initPathMode = cfg.INIT_PATH_MODE;
 
 % check inputs
 if (nargin == 0)
@@ -182,6 +184,8 @@ global g_decArgo_qcProbablyGood;
 global g_decArgo_qcInterpolated;
 global g_decArgo_qcMissing;
 
+global g_estProfLoc_initPathMode; % cc 01/2026 PR3
+global g_estProfLoc_latThreshold ; % cc 01/2026 PR3
 
 % define the sets of cycles to process
 pos = ones(size(a_floatData.positionQc));
@@ -244,19 +248,83 @@ for idS = 1:length(startIdList)
     idStart = startIdList(idS);
     idStop = stopIdList(idS);
 
-    % interpolate the locations
-    % [cc 12/2025 PR2 ...>
-    %[lonInter, latInter] = interpolate_between_2_locations(...
-    [lonInter, latInter] = interpolate_between_2_locations_geo(...
-        a_floatData.juldLocation(idStart), a_floatData.longitude(idStart), a_floatData.latitude(idStart), ...
-        a_floatData.juldLocation(idStop), a_floatData.longitude(idStop), a_floatData.latitude(idStop), ...
-        a_floatData.juldLocation(idStart+1:idStop-1)');
-    % ... cc 12/2025]
+    % [cc 01/2026 PR3 ...>
+
+    switch g_estProfLoc_initPathMode
+        case 'GEODESIC'
+            % interpolate the locations
+            % [cc 12/2025 PR2 ...>
+            %[lonInter, latInter] = interpolate_between_2_locations(...
+            [lonInter, latInter] = interpolate_between_2_locations_geo(...
+                a_floatData.juldLocation(idStart), a_floatData.longitude(idStart), a_floatData.latitude(idStart), ...
+                a_floatData.juldLocation(idStop), a_floatData.longitude(idStop), a_floatData.latitude(idStop), ...
+                a_floatData.juldLocation(idStart+1:idStop-1)');
+            
+            % ... cc 12/2025]
+        case 'BATHY'
+            segment_data.cycleNumber = a_floatData.cycleNumber(idStart:idStop);
+            segment_data.grounded = a_floatData.grounded(idStart:idStop);
+            segment_data.profPresMax = a_floatData.profPresMax(idStart:idStop);
+            segment_data.time = a_floatData.juldLocation(idStart:idStop);
+
+          
+            PARAM.isarctic = (max(a_floatData.latitude) >= g_estProfLoc_latThreshold) || (min(a_floatData.latitude) <= -g_estProfLoc_latThreshold);
+            juld_query = a_floatData.juldLocation(idStart+1:idStop-1)';
+            [latInter, lonInter] = interpolate_along_bathymetry( ...
+                segment_data, ...                       % segment_data
+                a_floatData.latitude(idStart), ...
+                a_floatData.longitude(idStart), ...
+                a_floatData.latitude(idStop), ...
+                a_floatData.longitude(idStop), ...
+                juld_query, ...
+                a_floatData.juldLocation(idStart), ...
+                a_floatData.juldLocation(idStop), ...
+                PARAM, 'method','adaptive_isobath','n_waypoints',length(juld_query) );
+
+        otherwise
+            error('Interpolation Mode not known')
+    end
+    % ...cc 01/2026]
+
     a_floatData.longitude(idStart+1:idStop-1) = lonInter';
     a_floatData.latitude(idStart+1:idStop-1) = latInter';
     a_floatData.positionQc(idStart+1:idStop-1) = g_decArgo_qcInterpolated;
    
 end
+
+% [cc 01/2026 PR3 ...>  Plot initial path
+close all
+screenSize = get(0, 'ScreenSize');
+fig1=figure('Name', 'Initial Path', ...
+'Position', [1 screenSize(4)*(1/3) screenSize(3) screenSize(4)*(2/3)-90], ...
+    'Color', 'w');
+useStereo = (max(a_floatData.latitude) >= g_estProfLoc_latThreshold) || (min(a_floatData.latitude) <= -g_estProfLoc_latThreshold);
+
+if useStereo
+    latMax=max(a_floatData.latitude); latMin=min(a_floatData.latitude);
+    
+    m_proj('stereographic','lat',min((latMax+latMin)/2,90),'lon',max(mean(a_floatData.longitude),-180),'radius',min(latMax-latMin+20,30));
+    m_grid
+else
+    m_proj('mercator', 'latitudes', [latMin latMax], 'longitudes', [lonMin lonMax]);
+    m_grid('box', 'fancy', 'tickdir', 'out', 'linestyle', 'none');
+end
+hold on;
+m_etopo2('contour',[-2000 -1000 0]);
+p2=m_plot(a_floatData.longitude,a_floatData.latitude,'.-m','LineWidth',2);
+p1=m_plot(a_floatData.longitude(a_floatData.positionQc==1),a_floatData.latitude(a_floatData.positionQc==1),'*g');
+thetitle = sprintf('Float: %d - Cycles: %03d to %03d - Initial Path\n', ...
+    a_floatNum, ...
+    a_floatData.cycleNumber(1), ...
+    a_floatData.cycleNumber(end));
+title(thetitle, 'FontSize', 14);
+switch g_estProfLoc_initPathMode
+    case 'GEODESIC'
+        legend([p1 p2],{'PositionQC=1', 'Interpolated Positions (Geodesic)'},'Location', 'NorthEastOutside')
+    case 'BATHY'
+        legend([p1 p2],{'PositionQC=1', 'Interpolated Positions (Along isobaths) -smooth'},'Location', 'NorthEastOutside')       
+end
+ % ...cc 01/2026]
 
 % compute speeds
 speed = nan(size(a_floatData.juldLocation));
@@ -378,6 +446,9 @@ grounded = a_floatData.grounded(a_idStart:a_idStop);
 groundedPres = a_floatData.groundedPres(a_idStart:a_idStop);
 gebcoDepth = a_floatData.gebcoDepth(a_idStart:a_idStop);
 
+
+
+
 % define depth constraint for each cycle
 depthConstraint = interp1q([juld(1); juld(end)], [gebcoDepth(1); gebcoDepth(end)], juld')';
 lastId = 1;
@@ -400,7 +471,7 @@ o_floatData.depthConstraint(a_idStart:a_idStop) = depthConstraint;
 warning off;
 
 screenSize = get(0, 'ScreenSize');
-figure('Name', 'Estimate profile locations', ...
+fig2=figure('Name', 'Estimate profile locations', ...
     'Position', [1 screenSize(4)*(1/3) screenSize(3) screenSize(4)*(2/3)-90], ...
     'Color', 'w');
 
@@ -578,7 +649,7 @@ toc
 tic
         %[cc 12/2025 PR2....>
         useStereo = (max(a_floatData.latitude) >= g_estProfLoc_latThreshold) || (min(a_floatData.latitude) <= -g_estProfLoc_latThreshold);
-        
+        figure(fig2)
         if useStereo
             latMax=max(latitudeOri); latMin=min(latitudeOri);
             lonMax=max(longitudeOri); lonMin=min(longitudeOri);
@@ -1786,10 +1857,11 @@ return
 %   azimuthMode - Method used to compute trajectory azimuth:
 %                 'local'       : search locations  are perpendicular to the
 %                                 instantaneous direction of the initial path 
-%                 'parallel' : search locations are normal to a direction that 
+%                 'mean' : search locations are perpendicular to a mean direction that 
 %                              is parrall-transported from the geodesic connecting 
 %                              the first and last point of the initial path
-%                 (default: 'local')
+%                              (default)
+%                 
 %
 % OUTPUTS:
 %   o_lon     - Longitudes of search points across-track [deg]
@@ -1810,7 +1882,7 @@ return
 function [o_lon, o_lat] = get_loc_on_search_range_geo1(a_lon, a_lat, a_range, longitude, latitude, azimuthMode)
 
 if nargin < 6 || isempty(azimuthMode)
-    azimuthMode = 'local';
+    azimuthMode = 'mean';
 end
 
 
@@ -1823,7 +1895,7 @@ switch lower(azimuthMode)
         % Local azimuth of the trajectory tangent
         az = azimuth(a_lat(1), a_lon(1), a_lat(2), a_lon(2));
 
-    case 'parallel'
+    case 'mean'
         %  Local azimuth at point P of a direction that is parrall-transported from the geodesic connecting the first and last point of the initial path
         az = azimuth_parallel_gc( ...
             latitude(1), longitude(1), ...
@@ -1923,7 +1995,7 @@ switch lower(azimuthMode)
             'wgs84');
         az = az(1);   % forward azimuth in degrees
 
-    case 'parallel'
+    case 'mean'
         % Azimuth parallel-transported from the global geodesic
         az = azimuth_parallel_gc_lpo( ...
             latitude(1), longitude(1), ...
