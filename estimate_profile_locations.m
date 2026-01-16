@@ -64,6 +64,7 @@ global g_estProfLoc_plotPdf;
 global g_estProfLoc_azimuthMode; % cc 12/2025 PR2
 global g_estProfLoc_latThreshold; % cc 12/2025 PR2
 global g_estProfLoc_initPathMode; % cc 01/2026 PR3
+global g_estProfLoc_changeDepthConstraint; % cc 12/2025 PR3
 
 g_estProfLoc_version = '1.1';
 g_estProfLoc_diffDepthToStart = cfg.DIFF_DEPTH_TO_START;
@@ -77,6 +78,7 @@ g_estProfLoc_plotPdf = cfg.PLOT_PDF;
 g_estProfLoc_azimuthMode = cfg.AZIMUTH_MODE;
 g_estProfLoc_latThreshold = cfg.LAT_THRESHOLD;
 g_estProfLoc_initPathMode = cfg.INIT_PATH_MODE;
+g_estProfLoc_changeDepthConstraint = 1;
 
 % check inputs
 if (nargin == 0)
@@ -433,7 +435,7 @@ global g_estProfLoc_plotPdf;
 
 global g_estProfLoc_azimuthMode; % cc 12/2025 PR2
 global g_estProfLoc_latThreshold; % cc 12/2025 PR2
-
+global g_estProfLoc_changeDepthConstraint; % cc 12/2025 PR3
 
 % consider only data of the set
 cycleNumber = a_floatData.cycleNumber(a_idStart:a_idStop);
@@ -462,6 +464,16 @@ end
 if (lastId ~= 1)
     depthConstraint(lastId:end) = interp1q([juld(lastId); juld(end)], [depthConstraint(lastId); depthConstraint(end)], juld(lastId:end)')';
 end
+
+% [cc 01/2026 PR3 ...>
+if g_estProfLoc_changeDepthConstraint == 1
+    for idC = 2:length(cycleNumber)-1
+        if ~isnan(profPresMax(idC)) && (profPresMax(idC) > depthConstraint(idC))
+            depthConstraint(idC) = max(profPresMax(idC),median(profPresMax));
+        end
+    end
+end
+% ... cc 01/2026]
 
 o_floatData.setNumber(a_idStart:a_idStop) = a_setNum;
 o_floatData.depthConstraint(a_idStart:a_idStop) = depthConstraint;
@@ -559,7 +571,15 @@ idC
             depthFlag = ones(size(depthVal));
             diffVal = depthVal - depthConstraint(idC+1);
             if (grounded(idC+1) == 0)
-                idOk = find(diffVal >= -g_estProfLoc_floatVsbathyTolerance);
+                % [cc 01/2026 PR3 --->
+                %idOk = find(diffVal >= -g_estProfLoc_floatVsbathyTolerance);
+                 if g_estProfLoc_changeDepthConstraint == 1
+                    idOk = find(depthVal >= profPresMax(idC+1)-g_estProfLoc_floatVsbathyTolerance);
+                else
+
+                    idOk = find(diffVal >= -g_estProfLoc_floatVsbathyTolerance);
+                 end
+                 % ...cc 01/2026 ]
             else
                 idOk = find((diffVal >= -g_estProfLoc_floatVsbathyToleranceForGrd) & ...
                     (diffVal <= g_estProfLoc_floatVsbathyToleranceForGrd));
