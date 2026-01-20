@@ -529,6 +529,7 @@ for idLoop = 1:2
         latitude = fliplr(latitude);
         depthConstraint = fliplr(depthConstraint);
         %[cc 12/2025 PR3....>
+        profPresMax = fliplr(profPresMax);
         grounded = fliplr(grounded);
         % ... cc 12/2025]
     end
@@ -802,6 +803,7 @@ if (idLoop == 2)
     longitude = fliplr(longitude);
     latitude = fliplr(latitude);
     depthConstraint = fliplr(depthConstraint);
+    profPresMax = fliplr(profPresMax);
     grounded = fliplr(grounded);
 end
 %... cc 12/2025 ]
