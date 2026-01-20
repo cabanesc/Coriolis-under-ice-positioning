@@ -65,6 +65,7 @@ global g_estProfLoc_azimuthMode; % cc 12/2025 PR2
 global g_estProfLoc_latThreshold; % cc 12/2025 PR2
 global g_estProfLoc_initPathMode; % cc 01/2026 PR3
 global g_estProfLoc_changeDepthConstraint; % cc 12/2025 PR3
+global g_estProfLoc_maxExtend; % cc 01/2026 PR3
 
 g_estProfLoc_version = '1.1';
 g_estProfLoc_diffDepthToStart = cfg.DIFF_DEPTH_TO_START;
@@ -78,8 +79,8 @@ g_estProfLoc_plotPdf = cfg.PLOT_PDF;
 g_estProfLoc_azimuthMode = cfg.AZIMUTH_MODE;
 g_estProfLoc_latThreshold = cfg.LAT_THRESHOLD;
 g_estProfLoc_initPathMode = cfg.INIT_PATH_MODE;
-g_estProfLoc_changeDepthConstraint = 1;
-
+g_estProfLoc_changeDepthConstraint = 1; % 0 if kept as the original implementation
+g_estProfLoc_maxExtend = cfg.MAX_EXTEND;
 % check inputs
 if (nargin == 0)
     if ~(exist(cfg.FLOAT_LIST_FILE_NAME, 'file') == 2)
@@ -284,7 +285,7 @@ for idS = 1:length(startIdList)
                 PARAM, 'method','adaptive_isobath','n_waypoints',length(juld_query) );
 
         otherwise
-            error('Interpolation Mode not known')
+            error('INIT_PATH_MODE (config) not known')
     end
     % ...cc 01/2026]
 
@@ -436,6 +437,9 @@ global g_estProfLoc_plotPdf;
 global g_estProfLoc_azimuthMode; % cc 12/2025 PR2
 global g_estProfLoc_latThreshold; % cc 12/2025 PR2
 global g_estProfLoc_changeDepthConstraint; % cc 12/2025 PR3
+global g_estProfLoc_initPathMode; % cc 01/2026 PR3
+global g_estProfLoc_maxExtend; % cc 01/2026 PR3
+
 
 % consider only data of the set
 cycleNumber = a_floatData.cycleNumber(a_idStart:a_idStop);
@@ -566,7 +570,16 @@ idC
             end
 
             % retrieve location depth
+            % [cc 01/2026 PR3 -----> 
             depthVal = get_gebco_depth(lonTab, latTab, a_gebcoFilePathName);
+            if strcmp(g_estProfLoc_initPathMode,'BATHY')&~isempty(g_estProfLoc_maxExtend) % Do not allow paths that are too far from the initial path
+                depthVal=NaN*zeros(size(lonTab));
+                idcenter=floor(length(lonTab)/2)+1;
+                idmax=min(idcenter+range*g_estProfLoc_maxExtend,length(lonTab));
+                idmin=max(idcenter-range*g_estProfLoc_maxExtend,1);
+                depthVal(idmin:idmax) = get_gebco_depth(lonTab(idmin:idmax), latTab(idmin:idmax), a_gebcoFilePathName);
+            end
+            % ----- cc 01/2026 PR3]
 
             depthFlag = ones(size(depthVal));
             diffVal = depthVal - depthConstraint(idC+1);
