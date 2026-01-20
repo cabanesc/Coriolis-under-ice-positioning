@@ -25,7 +25,7 @@
 % ------------------------------------------------------------------------------
 function estimate_profile_locations(varargin)
 
-% [cc 12/2025--->
+% [cc 12/2025  --->
 % load configuration parameters
 
 if exist('config.txt')
@@ -61,6 +61,12 @@ global g_estProfLoc_rangePeriod;
 global g_estProfLoc_plotPng;
 global g_estProfLoc_plotPdf;
 
+global g_estProfLoc_azimuthMode; % cc 12/2025 PR2
+global g_estProfLoc_latThreshold; % cc 12/2025 PR2
+global g_estProfLoc_initPathMode; % cc 01/2026 PR3
+global g_estProfLoc_changeDepthConstraint; % cc 12/2025 PR3
+global g_estProfLoc_maxExtend; % cc 01/2026 PR3
+
 g_estProfLoc_version = '1.1';
 g_estProfLoc_diffDepthToStart = cfg.DIFF_DEPTH_TO_START;
 g_estProfLoc_floatVsbathyTolerance = cfg.FLOAT_VS_BATHY_TOLERANCE;
@@ -70,8 +76,11 @@ g_estProfLoc_lastRange = cfg.LAST_RANGE;
 g_estProfLoc_rangePeriod = cfg.RANGE_PERIOD;
 g_estProfLoc_plotPng = cfg.PLOT_PNG;
 g_estProfLoc_plotPdf = cfg.PLOT_PDF;
-
-
+g_estProfLoc_azimuthMode = cfg.AZIMUTH_MODE;
+g_estProfLoc_latThreshold = cfg.LAT_THRESHOLD;
+g_estProfLoc_initPathMode = cfg.INIT_PATH_MODE;
+g_estProfLoc_changeDepthConstraint = 1; % 0 if kept as the original implementation
+g_estProfLoc_maxExtend = cfg.MAX_EXTEND;
 % check inputs
 if (nargin == 0)
     if ~(exist(cfg.FLOAT_LIST_FILE_NAME, 'file') == 2)
@@ -178,6 +187,8 @@ global g_decArgo_qcProbablyGood;
 global g_decArgo_qcInterpolated;
 global g_decArgo_qcMissing;
 
+global g_estProfLoc_initPathMode; % cc 01/2026 PR3
+global g_estProfLoc_latThreshold ; % cc 01/2026 PR3
 
 % define the sets of cycles to process
 pos = ones(size(a_floatData.positionQc));
@@ -240,15 +251,83 @@ for idS = 1:length(startIdList)
     idStart = startIdList(idS);
     idStop = stopIdList(idS);
 
-    % interpolate the locations
-    [lonInter, latInter] = interpolate_between_2_locations(...
-        a_floatData.juldLocation(idStart), a_floatData.longitude(idStart), a_floatData.latitude(idStart), ...
-        a_floatData.juldLocation(idStop), a_floatData.longitude(idStop), a_floatData.latitude(idStop), ...
-        a_floatData.juldLocation(idStart+1:idStop-1)');
+    % [cc 01/2026 PR3 ...>
+
+    switch g_estProfLoc_initPathMode
+        case 'GEODESIC'
+            % interpolate the locations
+            % [cc 12/2025 PR2 ...>
+            %[lonInter, latInter] = interpolate_between_2_locations(...
+            [lonInter, latInter] = interpolate_between_2_locations_geo(...
+                a_floatData.juldLocation(idStart), a_floatData.longitude(idStart), a_floatData.latitude(idStart), ...
+                a_floatData.juldLocation(idStop), a_floatData.longitude(idStop), a_floatData.latitude(idStop), ...
+                a_floatData.juldLocation(idStart+1:idStop-1)');
+            
+            % ... cc 12/2025]
+        case 'BATHY'
+            segment_data.cycleNumber = a_floatData.cycleNumber(idStart:idStop);
+            segment_data.grounded = a_floatData.grounded(idStart:idStop);
+            segment_data.profPresMax = a_floatData.profPresMax(idStart:idStop);
+            segment_data.time = a_floatData.juldLocation(idStart:idStop);
+
+          
+            PARAM.isarctic = (max(a_floatData.latitude) >= g_estProfLoc_latThreshold) || (min(a_floatData.latitude) <= -g_estProfLoc_latThreshold);
+            juld_query = a_floatData.juldLocation(idStart+1:idStop-1)';
+            [latInter, lonInter] = interpolate_along_bathymetry( ...
+                segment_data, ...                       % segment_data
+                a_floatData.latitude(idStart), ...
+                a_floatData.longitude(idStart), ...
+                a_floatData.latitude(idStop), ...
+                a_floatData.longitude(idStop), ...
+                juld_query, ...
+                a_floatData.juldLocation(idStart), ...
+                a_floatData.juldLocation(idStop), ...
+                PARAM, 'method','adaptive_isobath','n_waypoints',length(juld_query) );
+
+        otherwise
+            error('INIT_PATH_MODE (config) not known')
+    end
+    % ...cc 01/2026]
+
     a_floatData.longitude(idStart+1:idStop-1) = lonInter';
     a_floatData.latitude(idStart+1:idStop-1) = latInter';
     a_floatData.positionQc(idStart+1:idStop-1) = g_decArgo_qcInterpolated;
+   
 end
+
+% [cc 01/2026 PR3 ...>  Plot initial path
+close all
+screenSize = get(0, 'ScreenSize');
+fig1=figure('Name', 'Initial Path', ...
+'Position', [1 screenSize(4)*(1/3) screenSize(3) screenSize(4)*(2/3)-90], ...
+    'Color', 'w');
+useStereo = (max(a_floatData.latitude) >= g_estProfLoc_latThreshold) || (min(a_floatData.latitude) <= -g_estProfLoc_latThreshold);
+
+if useStereo
+    latMax=max(a_floatData.latitude); latMin=min(a_floatData.latitude);
+    
+    m_proj('stereographic','lat',min((latMax+latMin)/2,90),'lon',max(mean(a_floatData.longitude),-180),'radius',min(latMax-latMin+20,30));
+    m_grid
+else
+    m_proj('mercator', 'latitudes', [latMin latMax], 'longitudes', [lonMin lonMax]);
+    m_grid('box', 'fancy', 'tickdir', 'out', 'linestyle', 'none');
+end
+hold on;
+m_etopo2('contour',[-2000 -1000 0]);
+p2=m_plot(a_floatData.longitude,a_floatData.latitude,'.-m','LineWidth',2);
+p1=m_plot(a_floatData.longitude(a_floatData.positionQc==1),a_floatData.latitude(a_floatData.positionQc==1),'*g');
+thetitle = sprintf('Float: %d - Cycles: %03d to %03d - Initial Path\n', ...
+    a_floatNum, ...
+    a_floatData.cycleNumber(1), ...
+    a_floatData.cycleNumber(end));
+title(thetitle, 'FontSize', 14);
+switch g_estProfLoc_initPathMode
+    case 'GEODESIC'
+        legend([p1 p2],{'PositionQC=1', 'Interpolated Positions (Geodesic)'},'Location', 'NorthEastOutside')
+    case 'BATHY'
+        legend([p1 p2],{'PositionQC=1', 'Interpolated Positions (Along isobaths) -smooth'},'Location', 'NorthEastOutside')       
+end
+ % ...cc 01/2026]
 
 % compute speeds
 speed = nan(size(a_floatData.juldLocation));
@@ -355,6 +434,12 @@ global g_estProfLoc_rangePeriod;
 global g_estProfLoc_plotPng;
 global g_estProfLoc_plotPdf;
 
+global g_estProfLoc_azimuthMode; % cc 12/2025 PR2
+global g_estProfLoc_latThreshold; % cc 12/2025 PR2
+global g_estProfLoc_changeDepthConstraint; % cc 12/2025 PR3
+global g_estProfLoc_initPathMode; % cc 01/2026 PR3
+global g_estProfLoc_maxExtend; % cc 01/2026 PR3
+
 
 % consider only data of the set
 cycleNumber = a_floatData.cycleNumber(a_idStart:a_idStop);
@@ -366,6 +451,9 @@ profPresMax = a_floatData.profPresMax(a_idStart:a_idStop);
 grounded = a_floatData.grounded(a_idStart:a_idStop);
 groundedPres = a_floatData.groundedPres(a_idStart:a_idStop);
 gebcoDepth = a_floatData.gebcoDepth(a_idStart:a_idStop);
+
+
+
 
 % define depth constraint for each cycle
 depthConstraint = interp1q([juld(1); juld(end)], [gebcoDepth(1); gebcoDepth(end)], juld')';
@@ -381,15 +469,25 @@ if (lastId ~= 1)
     depthConstraint(lastId:end) = interp1q([juld(lastId); juld(end)], [depthConstraint(lastId); depthConstraint(end)], juld(lastId:end)')';
 end
 
+% [cc 01/2026 PR3 ...>
+if g_estProfLoc_changeDepthConstraint == 1
+    for idC = 2:length(cycleNumber)-1
+        if ~isnan(profPresMax(idC)) && (profPresMax(idC) > depthConstraint(idC))
+            depthConstraint(idC) = max(profPresMax(idC),median(profPresMax));
+        end
+    end
+end
+% ... cc 01/2026]
+
 o_floatData.setNumber(a_idStart:a_idStop) = a_setNum;
 o_floatData.depthConstraint(a_idStart:a_idStop) = depthConstraint;
 
 % create the figure
-close(findobj('Name', 'Estimate profile locations'));
+% close(findobj('Name', 'Estimate profile locations'));
 warning off;
 
 screenSize = get(0, 'ScreenSize');
-figure('Name', 'Estimate profile locations', ...
+fig2=figure('Name', 'Estimate profile locations', ...
     'Position', [1 screenSize(4)*(1/3) screenSize(3) screenSize(4)*(2/3)-90], ...
     'Color', 'w');
 
@@ -430,11 +528,15 @@ for idLoop = 1:2
         longitude = fliplr(longitude);
         latitude = fliplr(latitude);
         depthConstraint = fliplr(depthConstraint);
+        %[cc 12/2025 PR3....>
+        profPresMax = fliplr(profPresMax);
+        grounded = fliplr(grounded);
+        % ... cc 12/2025]
     end
 
     % increase range until the path is found
     for range = g_estProfLoc_firstRange:g_estProfLoc_rangePeriod:g_estProfLoc_lastRange
-
+tic
         if (idLoop == 1)
             fprintf('   Trying forward with RANGE = %d', range);
         else
@@ -450,9 +552,14 @@ for idLoop = 1:2
         lonTabAll = nan(nbLig, nbCol);
         latTabAll = nan(nbLig, nbCol);
         for idC = 1:length(longitude)-1
-
+idC
             % create the set of locations on the search segment
-            [lonTab, latTab] = get_loc_on_search_range(longitude([idC idC+1]), latitude([idC idC+1]), idC*range, tetaDeg);
+
+           % [cc 12/2025 PR2 ----->
+           %[lonTab, latTab] = get_loc_on_search_range(longitude([idC idC+1]), latitude([idC idC+1]), idC*range, tetaDeg);
+           [lonTab, latTab] = get_loc_on_search_range_geo(longitude([idC idC+1]), latitude([idC idC+1]), idC*range,longitude,latitude,g_estProfLoc_azimuthMode);
+           % ----- cc 12/2025 PR2]
+
             if (any((lonTab < -180) | (lonTab >= 360) | ...
                     (latTab < -90) | (latTab > 90)))
                 idLonKo = find((lonTab < -180) | (lonTab >= 360));
@@ -464,12 +571,29 @@ for idLoop = 1:2
             end
 
             % retrieve location depth
+            % [cc 01/2026 PR3 -----> 
             depthVal = get_gebco_depth(lonTab, latTab, a_gebcoFilePathName);
+            if strcmp(g_estProfLoc_initPathMode,'BATHY')&~isempty(g_estProfLoc_maxExtend) % Do not allow paths that are too far from the initial path
+                depthVal=NaN*zeros(size(lonTab));
+                idcenter=floor(length(lonTab)/2)+1;
+                idmax=min(idcenter+range*g_estProfLoc_maxExtend,length(lonTab));
+                idmin=max(idcenter-range*g_estProfLoc_maxExtend,1);
+                depthVal(idmin:idmax) = get_gebco_depth(lonTab(idmin:idmax), latTab(idmin:idmax), a_gebcoFilePathName);
+            end
+            % ----- cc 01/2026 PR3]
 
             depthFlag = ones(size(depthVal));
             diffVal = depthVal - depthConstraint(idC+1);
             if (grounded(idC+1) == 0)
-                idOk = find(diffVal >= -g_estProfLoc_floatVsbathyTolerance);
+                % [cc 01/2026 PR3 --->
+                %idOk = find(diffVal >= -g_estProfLoc_floatVsbathyTolerance);
+                 if g_estProfLoc_changeDepthConstraint == 1
+                    idOk = find(depthVal >= profPresMax(idC+1)-g_estProfLoc_floatVsbathyTolerance);
+                else
+
+                    idOk = find(diffVal >= -g_estProfLoc_floatVsbathyTolerance);
+                 end
+                 % ...cc 01/2026 ]
             else
                 idOk = find((diffVal >= -g_estProfLoc_floatVsbathyToleranceForGrd) & ...
                     (diffVal <= g_estProfLoc_floatVsbathyToleranceForGrd));
@@ -482,7 +606,9 @@ for idLoop = 1:2
             lonTabAll((nbCol-(idC+1))*range+(1:length(depthVal)), idC+1) = lonTab;
             latTabAll((nbCol-(idC+1))*range+(1:length(depthVal)), idC+1) = latTab;
         end
+toc
 
+tic
         % try to find a path
         result = nan(length(longitude), 1);
         curId = (nbCol-1)*range + 1;
@@ -508,7 +634,7 @@ for idLoop = 1:2
                 curId = result(idC);
             end
         end
-
+toc
         if (idLoop == 1)
             dir = 'Foreward';
             dir2 = '1_foreward';
@@ -542,24 +668,46 @@ for idLoop = 1:2
         % arrays to store legend information
         legendPlots = [];
         legendLabels = [];
-
+tic
         idDone = find(devTabFlag == 2);
         [lonMin, lonMax, latMin, latMax] = compute_geo_extrema( ...
             [], [longitudeOri lonTabAll(idDone)'], [latitudeOri latTabAll(idDone)'], 0);
-        [elevC, lonC , latC] = get_gebco_elev_zone(lonMin, lonMax, latMin, latMax, a_gebcoFilePathName);
-
+       
+        %[cc 12/2025 PR1....>
+        %         [elevC, lonC , latC] = get_gebco_elev_zone(lonMin, lonMax, latMin, latMax, a_gebcoFilePathName);
+        %... cc 12/2025]
+       
         cla;
+toc
 
-        m_proj('mercator', 'latitudes', [latMin latMax], 'longitudes', [lonMin lonMax]);
-        m_grid('box', 'fancy', 'tickdir', 'out', 'linestyle', 'none');
+tic
+        %[cc 12/2025 PR2....>
+        useStereo = (max(a_floatData.latitude) >= g_estProfLoc_latThreshold) || (min(a_floatData.latitude) <= -g_estProfLoc_latThreshold);
+        figure(fig2)
+        if useStereo
+            latMax=max(latitudeOri); latMin=min(latitudeOri);
+            lonMax=max(longitudeOri); lonMin=min(longitudeOri);
+            m_proj('stereographic','lat',min((latMax+latMin)/2,90),'lon',max((lonMin+lonMax)/2,-180),'radius',min(latMax-latMin+5,30));
+            m_grid
+        else
+            m_proj('mercator', 'latitudes', [latMin latMax], 'longitudes', [lonMin lonMax]);
+            m_grid('box', 'fancy', 'tickdir', 'out', 'linestyle', 'none');
+        end
         hold on;
+        %... cc 12/2025]
 
         isobath = -unique(round(depthConstraint));
         isobath = min(isobath):100:max(isobath);
         if (length(isobath) == 1)
             isobath = [isobath isobath];
         end
-        [contourMatrix, contourHdl] = m_contour(lonC, latC, elevC, isobath, 'c');
+
+        %[cc 12/2025 PR1....>
+        %         [contourMatrix, contourHdl] = m_contour(lonC, latC, elevC, isobath, 'c');
+        [contourMatrix, contourHdl] = m_etopo2('contour',isobath);
+        contourHdl.LineColor='c';
+        %... cc 12/2025]
+        
         if (~isempty(contourMatrix))
             legendPlots = [legendPlots contourHdl];
             legendLabels = [legendLabels {'depth constraint isobath'}];
@@ -574,14 +722,18 @@ for idLoop = 1:2
             legendPlots = [legendPlots plotHdl];
             legendLabels = [legendLabels {'starting location'}];
         end
-
+toc
         for idC = 1:length(longitude)-1
             lonT = lonTabAll(:, idC+1);
             latT = latTabAll(:, idC+1);
 
             lonL = lonT(~isnan(lonT));
             latL = latT(~isnan(latT));
-            m_line([lonL(1) lonL(end)], [latL(1) latL(end)], 'linestyle', '-', 'visible', 'on');
+
+             %[cc 12/2025 PR2....>
+%             m_line([lonL(1) lonL(end)], [latL(1) latL(end)], 'linestyle', '-', 'visible', 'on');
+            m_plot(lonL, latL,'-b');
+             %... cc 12/2025]
 
             idNotChecked = find(devTabFlag(:, idC+1) == 0);
             plotHdl = m_plot(lonT(idNotChecked), latT(idNotChecked), 'h', 'MarkerFaceColor', 'g', 'MarkerEdgeColor', 'g', 'Markersize',  4);
@@ -641,9 +793,20 @@ for idLoop = 1:2
         if (done)
             break
         end
-    end
-end
 
+    end
+    
+end
+%[cc 12/2025 PR3....> go back to original variables after backward
+% computation
+if (idLoop == 2)
+    longitude = fliplr(longitude);
+    latitude = fliplr(latitude);
+    depthConstraint = fliplr(depthConstraint);
+    profPresMax = fliplr(profPresMax);
+    grounded = fliplr(grounded);
+end
+%... cc 12/2025 ]
 % plot final trajectory
 if (done)
 
@@ -663,22 +826,41 @@ if (done)
 
     [lonMin, lonMax, latMin, latMax] = compute_geo_extrema( ...
         [], [longitudeOri resultF(:, 1)' resultB(:, 1)'], [latitudeOri resultF(:, 2)' resultB(:, 2)'], 0);
-    [elevC, lonC , latC] = get_gebco_elev_zone(lonMin, lonMax, latMin, latMax, a_gebcoFilePathName);
+    %[cc 12/2025 PR1....>
+%     [elevC, lonC , latC] = get_gebco_elev_zone(lonMin, lonMax, latMin, latMax, a_gebcoFilePathName);
+    %... cc 12/2025]
 
     cla;
+    %[cc 12/2025 PR2....>
 
-    m_proj('mercator', 'latitudes', [latMin latMax], 'longitudes', [lonMin lonMax]);
-    m_grid('box', 'fancy', 'tickdir', 'out', 'linestyle', 'none');
+    if useStereo
+        latMax=max(latitudeOri); latMin=min(latitudeOri);
+        lonMax=max(longitudeOri); lonMin=min(longitudeOri);
+        m_proj('stereographic','lat',min((latMax+latMin)/2,90),'lon',max((lonMin+lonMax)/2,-180),'radius',min(latMax-latMin+5,30));
+        m_grid
+    else
+        m_proj('mercator', 'latitudes', [latMin latMax], 'longitudes', [lonMin lonMax]);
+        m_grid('box', 'fancy', 'tickdir', 'out', 'linestyle', 'none');
+    end
     hold on;
+    %.... cc 12/2025]
 
     isobath = -unique(round(depthConstraint));
     isobath = min(isobath):100:max(isobath);
     if (length(isobath) == 1)
         isobath = [isobath isobath];
     end
-    m_contour(lonC, latC, elevC, isobath, 'c');
 
-    m_line([longitude(1) longitude(end)], [latitude(1) latitude(end)], 'linestyle', '-', 'visible', 'on');
+    %[cc 12/2025 PR1....>
+%     m_contour(lonC, latC, elevC, isobath, 'c');
+    [contourMatrix, contourHdl] = m_etopo2('contour',isobath);
+    contourHdl.LineColor='c';
+    %... cc 12/2025]
+
+    %[cc 12/2025 PR2....>
+    %m_line([longitude(1) longitude(end)], [latitude(1) latitude(end)], 'linestyle', '-', 'visible', 'on');
+     m_plot(longitude,latitude,'-m')
+    %... cc 12/2025]
 
     title(label, 'FontSize', 14);
 
@@ -1692,6 +1874,310 @@ o_lat = [fliplr(latTer) a_lat(2) latBis];
 
 return
 
+% [cc 12/2025 PR2 --->
+% ------------------------------------------------------------
+% Compute a cross-track search range around a path 
+% using geodesic calculations on the WGS84 ellipsoid.
+%
+% SYNTAX :
+%
+% [o_lon, o_lat] = get_loc_on_search_range_geo(a_lon, a_lat, a_range, longitude, latitude, azimuthMode)
+%
+% INPUTS:
+%   a_lon     - Longitudes of two consecutive trajectory points [deg]
+%   a_lat     - Latitudes of two consecutive trajectory points  [deg]
+%   a_range   - Search half-width in kilometers
+%   longitude - Full trajectory longitudes 
+%   latitude  - Full trajectory latitudes  
+%   azimuthMode - Method used to compute trajectory azimuth:
+%                 'local'       : search locations  are perpendicular to the
+%                                 instantaneous direction of the initial path 
+%                 'mean' : search locations are perpendicular to a mean direction that 
+%                              is parrall-transported from the geodesic connecting 
+%                              the first and last point of the initial path
+%                              (default)
+%                 
+%
+% OUTPUTS:
+%   o_lon     - Longitudes of search points across-track [deg]
+%   o_lat     - Latitudes of search points across-track  [deg]
+
+function [o_lon, o_lat] = get_loc_on_search_range_geo(a_lon, a_lat, a_range, longitude, latitude, azimuthMode)
+
+if exist('distance','file')&exist('reckon','file')&exist('azimuth','file') % if mapping toolbox available
+    [o_lon, o_lat] = get_loc_on_search_range_geo1(a_lon, a_lat, a_range, longitude, latitude, azimuthMode);
+else
+    [o_lon, o_lat] = get_loc_on_search_range_geo2(a_lon, a_lat, a_range, longitude, latitude, azimuthMode);
+end
+
+return
+% -----------------------
+% 1: use mapping toolbox
+% -----------------------
+function [o_lon, o_lat] = get_loc_on_search_range_geo1(a_lon, a_lat, a_range, longitude, latitude, azimuthMode)
+
+if nargin < 6 || isempty(azimuthMode)
+    azimuthMode = 'mean';
+end
+
+
+lat0 = a_lat(2);
+lon0 = a_lon(2);
+
+switch lower(azimuthMode)
+
+    case 'local'
+        % Local azimuth of the trajectory tangent
+        az = azimuth(a_lat(1), a_lon(1), a_lat(2), a_lon(2));
+
+    case 'mean'
+        %  Local azimuth at point P of a direction that is parrall-transported from the geodesic connecting the first and last point of the initial path
+        az = azimuth_parallel_gc( ...
+            latitude(1), longitude(1), ...
+            latitude(end), longitude(end), ...
+            lat0, lon0);
+
+    otherwise
+        error('Unknown azimuthMode: %s', azimuthMode);
+end
+
+
+% Azimuths normal to the trajectory (right and left)
+normal1 = mod(az + 90, 360);
+normal2 = mod(az - 90, 360);
+
+% Distances along the normal directions (1 km increments)
+dist_km = 1:a_range;
+
+% WGS84 reference ellipsoid (meters)
+wgs84 = referenceEllipsoid('wgs84','meters');
+
+% Compute positions on the right side of the trajectory
+[latR, lonR] = reckon(lat0, lon0, dist_km*1000, normal1, wgs84);
+
+% Compute positions on the left side of the trajectory
+[latL, lonL] = reckon(lat0, lon0, dist_km*1000, normal2, wgs84);
+
+% Ensure row vectors
+latL = latL(:)';
+latR = latR(:)';
+lonL = lonL(:)';
+lonR = lonR(:)';
+
+% Assemble output search range (left → center → right)
+o_lat = [fliplr(latL) lat0 latR];
+o_lon = [fliplr(lonL) lon0 lonR];
+
+return
+
+% ------------------------------------------------------------------------
+function az_deg = azimuth_parallel_gc(latA, lonA, latB, lonB, latP, lonP)
+% Local azimuth at point P of a direction that is parallel to the geodesic AB
+% on the WGS84 ellipsoid.
+%
+% lat/lon in degrés
+
+latP = latP(:);
+lonP = lonP(:);
+
+% Initial azimuth of the reference geodesic A → B
+% WGS84 reference ellipsoid (meters)
+wgs84 = referenceEllipsoid('wgs84','meters');
+[~, azAB] = distance(latA, lonA, latB, lonB, wgs84);
+
+% Degrees to radians
+d2r = pi/180;
+phiA = latA * d2r;
+phiP = latP * d2r;
+lamA = lonA * d2r;
+lamP = lonP * d2r;
+
+% Parallel transport (rotation of the local reference frame)
+GammaA = lamA .* sin(phiA);
+GammaP = lamP .* sin(phiP);
+
+az_deg = azAB + rad2deg(GammaP - GammaA);
+az_deg = mod(az_deg, 360);
+
+return
+
+% ------------------------------------------------------------
+% 2: does not require mapping toolbox
+% ------------------------------------------------------------
+
+function [o_lon, o_lat] = get_loc_on_search_range_geo2( ...
+    a_lon, a_lat, a_range, longitude, latitude, azimuthMode)
+
+
+if nargin < 6 || isempty(azimuthMode)
+    azimuthMode = 'local';
+end
+
+% Reference point P (middle of the local segment)
+lat0 = a_lat(2);
+lon0 = a_lon(2);
+
+% ------------------------------------------------------------
+% Compute azimuth at P
+% ------------------------------------------------------------
+switch lower(azimuthMode)
+
+    case 'local'
+        % Local azimuth of the trajectory tangent (A1 -> A2)
+        [~, az] = distance_lpo( ...
+            [a_lat(1) a_lat(2)], ...
+            [a_lon(1) a_lon(2)], ...
+            'wgs84');
+        az = az(1);   % forward azimuth in degrees
+
+    case 'mean'
+        % Azimuth parallel-transported from the global geodesic
+        az = azimuth_parallel_gc_lpo( ...
+            latitude(1), longitude(1), ...
+            latitude(end), longitude(end), ...
+            lat0, lon0)
+         az1 = azimuth_parallel_gc( ...
+            latitude(1), longitude(1), ...
+            latitude(end), longitude(end), ...
+            lat0, lon0)
+
+    otherwise
+        error('Unknown azimuthMode: %s', azimuthMode);
+end
+
+% ------------------------------------------------------------
+% Normal azimuths (right / left)
+% ------------------------------------------------------------
+normalR = mod(az + 90, 360);
+normalL = mod(az - 90, 360);
+
+%------------------------------------------------------------
+% Distances along normal directions (meters)
+% ------------------------------------------------------------
+dist_m = (1:a_range) * 1000;   % 1 km increments
+
+% ------------------------------------------------------------
+% Compute points along normals using distance_lpo
+% ------------------------------------------------------------
+% Build small geodesics from P along each normal direction
+
+latR = zeros(1, a_range);
+lonR = zeros(1, a_range);
+latL = zeros(1, a_range);
+lonL = zeros(1, a_range);
+
+for k = 1:a_range
+    % Right side
+    [~, lat_tmp, lon_tmp] = distance_lpo( ...
+        [lat0 lat0], [lon0 lon0], 2, 'wgs84');
+    [latR(k), lonR(k)] = reckon_vincenty(lat0, lon0, dist_m(k), normalR);
+
+    % Left side
+    [latL(k), lonL(k)] = reckon_vincenty(lat0, lon0, dist_m(k), normalL);
+end
+
+% ------------------------------------------------------------
+% Assemble output (left → center → right)
+% ------------------------------------------------------------
+o_lat = [fliplr(latL) lat0 latR];
+o_lon = [fliplr(lonL) lon0 lonR];
+
+return
+
+function az_deg = azimuth_parallel_gc_lpo(latA, lonA, latB, lonB, latP, lonP)
+% ------------------------------------------------------------
+% Local azimuth at point P of a direction parallel-transported
+% from the geodesic AB (WGS84).
+% ------------------------------------------------------------
+
+% Initial azimuth of reference geodesic A → B
+[~, azAB] = distance_lpo([latA latB], [lonA lonB], 'wgs84');
+azAB = azAB(1);
+
+% Degrees to radians
+d2r = pi/180;
+phiA = latA * d2r;
+phiP = latP * d2r;
+lamA = lonA * d2r;
+lamP = lonP * d2r;
+
+% Parallel transport on ellipsoid (Levi-Civita, first order)
+GammaA = lamA .* sin(phiA);
+GammaP = lamP .* sin(phiP);
+
+az_deg = azAB + rad2deg(GammaP - GammaA);
+az_deg = mod(az_deg, 360);
+
+return
+
+function [lat2, lon2] = reckon_vincenty(lat1, lon1, s, az)
+% ------------------------------------------------------------
+% Vincenty direct formula (WGS84)
+% Moves from (lat1, lon1) along azimuth az for distance s (meters)
+% No Mapping Toolbox required
+% ------------------------------------------------------------
+
+% WGS84
+a = 6378137.0;
+f = 1/298.257223563;
+b = a * (1 - f);
+
+% Degrees to radians
+d2r = pi/180;
+phi1 = lat1 * d2r;
+lambda1 = lon1 * d2r;
+alpha1 = az * d2r;
+
+U1 = atan((1 - f) * tan(phi1));
+sinU1 = sin(U1);
+cosU1 = cos(U1);
+
+sinAlpha1 = sin(alpha1);
+cosAlpha1 = cos(alpha1);
+
+sinAlpha = cosU1 * sinAlpha1;
+cos2Alpha = 1 - sinAlpha^2;
+
+u2 = cos2Alpha * (a^2 - b^2) / b^2;
+A = 1 + u2/16384*(4096 + u2*(-768 + u2*(320 - 175*u2)));
+B = u2/1024*(256 + u2*(-128 + u2*(74 - 47*u2)));
+
+sigma = s / (b * A);
+sigmaP = 2*pi;
+
+while abs(sigma - sigmaP) > 1e-12
+    cos2SigmaM = cos(2*atan2(tan(U1),cosAlpha1) + sigma);
+    sinSigma = sin(sigma);
+    cosSigma = cos(sigma);
+    deltaSigma = B*sinSigma*(cos2SigmaM + ...
+        B/4*(cosSigma*(-1 + 2*cos2SigmaM^2) - ...
+        B/6*cos2SigmaM*(-3 + 4*sinSigma^2)*(-3 + 4*cos2SigmaM^2)));
+    sigmaP = sigma;
+    sigma = s/(b*A) + deltaSigma;
+end
+
+phi2 = atan2( ...
+    sinU1*cosSigma + cosU1*sinSigma*cosAlpha1, ...
+    (1 - f)*sqrt(sinAlpha^2 + ...
+    (sinU1*sinSigma - cosU1*cosSigma*cosAlpha1)^2));
+
+lambda = atan2( ...
+    sinSigma*sinAlpha1, ...
+    cosU1*cosSigma - sinU1*sinSigma*cosAlpha1);
+
+C = f/16*cos2Alpha*(4 + f*(4 - 3*cos2Alpha));
+L = lambda - (1 - C)*f*sinAlpha * ...
+    (sigma + C*sinSigma*(cos2SigmaM + ...
+    C*cosSigma*(-1 + 2*cos2SigmaM^2)));
+
+lon2 = (lambda1 + L) / d2r;
+lat2 = phi2 / d2r;
+
+return
+
+% ------ cc 12/2025 PR2]
+
+
 % ------------------------------------------------------------------------------
 % Initialize global default values.
 %
@@ -2004,6 +2490,119 @@ end
 o_interpLocLat = interp1q([a_firstLocDate; a_secondLocDate], [a_firstLocLat; a_secondLocLat], a_interpDate);
 
 return
+
+
+
+
+% [cc 12/2025 PR2...>
+%--------------------------------------------------------------
+
+function [o_interpLon, o_interpLat] = interpolate_between_2_locations_geo( ...
+    t1, lon1, lat1, t2, lon2, lat2, tInterp)
+% ------------------------------------------------------------
+% Interpolate between two geographic locations using a geodesic
+% (WGS84 ellipsoid) instead of linear lat/lon interpolation.
+% ------------------------------------------------------------
+if exist('distance','file')&exist('reckon','file')&exist('azimuth','file')
+     [o_interpLon, o_interpLat] = interpolate_between_2_locations_geo1( ...
+    t1, lon1, lat1, t2, lon2, lat2, tInterp);
+else
+    [o_interpLon, o_interpLat] = interpolate_between_2_locations_geo2( ...
+    t1, lon1, lat1, t2, lon2, lat2, tInterp);
+end
+
+return
+
+function [o_interpLon, o_interpLat] = interpolate_between_2_locations_geo1( ...
+    t1, lon1, lat1, t2, lon2, lat2, tInterp)
+% ------------------------------------------------------------
+% Interpolate between two geographic locations using a geodesic
+% (WGS84 ellipsoid) instead of linear lat/lon interpolation.
+% use mapping toolbox
+% ------------------------------------------------------------
+
+% Output initialization
+o_interpLon = [];
+o_interpLat = [];
+
+
+% Fraction of time between the two fixes
+f = (tInterp - t1) / (t2 - t1);
+
+% If time exactly matches one endpoint
+if f <= 0
+    o_interpLon = lon1;
+    o_interpLat = lat1;
+    return
+elseif f >= 1
+    o_interpLon = lon2;
+    o_interpLat = lat2;
+    return
+end
+
+% ------------------------------------------------------------
+% Geodesic calculation using WGS84 ellipsoid
+% ------------------------------------------------------------
+
+% Compute geodesic distance and azimuth from point 1 to point 2
+ellipsoid = wgs84Ellipsoid('kilometer');
+
+[dist12, az12] = distance(lat1, lon1, lat2, lon2, ellipsoid); % distance in km
+
+% Distance to travel along the geodesic
+dInterp = f * dist12;
+
+% Move from point 1 along the geodesic
+[o_interpLat, o_interpLon] = reckon(lat1, lon1, dInterp, az12, ellipsoid);
+
+
+return
+
+
+function [o_interpLon, o_interpLat] = interpolate_between_2_locations_geo2( ...
+    t1, lon1, lat1, t2, lon2, lat2, tInterp)
+% ------------------------------------------------------------
+% Interpolate between two geographic locations using a geodesic
+% (WGS84 ellipsoid) instead of linear lat/lon interpolation.
+% does not require mapping toolbox
+% use distance_lpo
+% ------------------------------------------------------------
+
+% Ensure column vector
+tInterp = tInterp(:);
+
+% Fraction of time
+f = (tInterp - t1) / (t2 - t1);
+
+% Clamp
+f = max(0, min(1, f));
+
+% ------------------------------------------------------------
+% Choose N based on temporal sampling
+% ------------------------------------------------------------
+Nt = numel(tInterp);
+oversample = 3;                 % user-tunable
+N = max(2, oversample * Nt);
+
+% ------------------------------------------------------------
+% Compute geodesic
+% ------------------------------------------------------------
+[~, lat_gd, lon_gd] = distance_lpo( ...
+    [lat1 lat2], [lon1 lon2], N, 'wgs84');
+
+% ------------------------------------------------------------
+% Map time fraction to geodesic index
+%------------------------------------------------------------
+idx = round(1 + f * (N-1));
+idx = max(1, min(N, idx));
+
+o_interpLat = lat_gd(idx);
+o_interpLon = lon_gd(idx);
+
+return
+
+% ... cc 12/2025]
+
 
 % ------------------------------------------------------------------------------
 % Compute geographic boundaries to plot a set of locations.
