@@ -17,9 +17,12 @@ The method has been improved by considering in situ data measured by the float t
 
 In this branch, several improvements to the initial algorithm have been implemented. 
 These improvements are described in more details here: 
-[performance improvements]{https://github.com/cabanesc/Coriolis-under-ice-positioning/pull/1}
-[implementation of the geodesic computation]{https://github.com/cabanesc/Coriolis-under-ice-positioning/pull/2}
-[algorithm improvements]{https://github.com/cabanesc/Coriolis-under-ice-positioning/pull/3}
+
+- [performance improvements](https://github.com/cabanesc/Coriolis-under-ice-positioning/pull/1)
+
+- [implementation of the geodesic computation](https://github.com/cabanesc/Coriolis-under-ice-positioning/pull/2)
+
+- [algorithm improvements](https://github.com/cabanesc/Coriolis-under-ice-positioning/pull/3)
 
 
 
