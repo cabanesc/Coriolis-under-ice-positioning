@@ -1,4 +1,9 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%  DO NOT MODIFY config_template.txt.
+%  Instead, make a copy of this file and name it config.txt.
+%  Edit config.txt to suit your local configuration.
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 % CONFIGURATION - START
 
 % Multiple MATLAB paths separated by semicolon
@@ -27,7 +32,7 @@ GEBCO_FILE = ./GEBCO_2022.nc
 % Choice of initial path used to initialize the terrain-following method
 % When INIT_PATH_MODE = GEODESIC, the initial path is the shortest path on the Earth's surface (geodesic), between the first and last known positions.
 % When INIT_PATH_MODE = BATHY,  the initial path follows a smoothed bathymetric contour (isobath-based path) between the first and last known positions.
-INIT_PATH_MODE = GEODESIC
+INIT_PATH_MODE = BATHY
 % ...cc 01/2026]
 
 % max difference (in meters) between sea bottom and float parking drift to start
@@ -51,7 +56,7 @@ RANGE_PERIOD = 10
 
 % [cc 01/2026 ---->
 % The terrain_following algorithm will not search for a  path farther than
-% MAX_EXTEND × RANGE (in kilometers) away from the initial path 
+% MAX_EXTEND × RANGE_PERIOD (in kilometers) away from the initial path 
 % (applies only if INIT_PATH_MODE = BATHY)
 % This parameter limits excessive deviations from the initial trajectory 
 % and helps prevent unrealistic paths.
@@ -59,13 +64,14 @@ RANGE_PERIOD = 10
 
 MAX_EXTEND = 10
 
+
 % Azimuth mode for defining search locations:
 % local    : normal to the instantaneous direction of the initial path
 % mean     : normal to a mean direction obtained by parallel transport from
 %           the geodesic connecting the first and last path points (default)
 % Both options are equivalent when the initial path is the shortest path on the Earth's surface (geodesic)
 
-AZIMUTH_MODE = mean
+AZIMUTH_MODE = local
 
 % Absolute latitude threshold (degrees) above which a stereographic projection is used for map plotting purposes only.
 
