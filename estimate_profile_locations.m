@@ -1,4 +1,4 @@
-% ------------------------------------------------------------------------------
+ % ------------------------------------------------------------------------------
 % Estimation of not located profile positions using a method based on the
 % "Terrain-following" method (Kaihe Yamazaki et al. paper
 % https://doi.org/10.1029/2019JC015406).
@@ -27,6 +27,7 @@ function estimate_profile_locations(varargin)
 
 % [cc 12/2025  --->
 % load configuration parameters
+close all
 
 if exist('config.txt')
     cfg = load_configuration('config.txt')
@@ -137,6 +138,27 @@ for idFloat = 1:nbFloats
 
     % retrieve float data from NetCDF files
     floatData = get_float_data(floatNum, [cfg.DIR_INPUT_NC_FILES '/' floatNumStr '/']);
+    
+    % [cc 03/2026  ...>
+    % Correct grounded flag return by the float, in case the float gets stuck a the surface
+    isgrounded_surface = find(floatData.grounded==1 & floatData.profPresMax<5 & floatData.positionQc==8);
+    if isempty (isgrounded_surface)==0
+        figure
+        hold on
+        h2=scatter(floatData.cycleNumber(floatData.grounded==1),floatData.profPresMax(floatData.grounded==1),40,'^r','filled');
+        h1=plot(floatData.cycleNumber,floatData.profPresMax,'+b');
+        set(gca,'Ydir','reverse')
+        grid on
+        h3=scatter(floatData.cycleNumber(isgrounded_surface),floatData.profPresMax(isgrounded_surface),100,'og','LineWidth',2);
+        legend([h1,h2,h3],{'Maximum pressure of the profile','grounded flag =1','corrected grounded flag (=0)'})
+        title({'Correction of grounded flag return by the float';' in case the float gets stuck a the surface'})
+        floatData.grounded(isgrounded_surface)=0; 
+        xlabel('Cycle Number')
+        ylabel('pressure(db)')
+    end
+    % ... cc 03/2026]
+
+
     if (isempty(floatData))
         fprintf('No profile location to estimate\n');
         continue
@@ -296,7 +318,6 @@ for idS = 1:length(startIdList)
 end
 
 % [cc 01/2026 PR3 ...>  Plot initial path
-close all
 screenSize = get(0, 'ScreenSize');
 fig1=figure('Name', 'Initial Path', ...
 'Position', [1 screenSize(4)*(1/3) screenSize(3) screenSize(4)*(2/3)-90], ...
@@ -305,10 +326,11 @@ useStereo = (max(a_floatData.latitude) >= g_estProfLoc_latThreshold) || (min(a_f
 
 if useStereo
     latMax=max(a_floatData.latitude); latMin=min(a_floatData.latitude);
-    
     m_proj('stereographic','lat',min((latMax+latMin)/2,90),'lon',max(mean(a_floatData.longitude),-180),'radius',min(latMax-latMin+20,30));
     m_grid
 else
+    latMax=max(a_floatData.latitude); latMin=min(a_floatData.latitude);
+    lonMax=max(a_floatData.longitude); lonMin=min(a_floatData.longitude);
     m_proj('mercator', 'latitudes', [latMin latMax], 'longitudes', [lonMin lonMax]);
     m_grid('box', 'fancy', 'tickdir', 'out', 'linestyle', 'none');
 end
@@ -477,6 +499,7 @@ if g_estProfLoc_changeDepthConstraint == 1
         end
     end
 end
+
 % ... cc 01/2026]
 
 o_floatData.setNumber(a_idStart:a_idStop) = a_setNum;
