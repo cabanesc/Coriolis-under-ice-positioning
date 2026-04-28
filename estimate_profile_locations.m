@@ -212,6 +212,8 @@ global g_decArgo_qcMissing;
 global g_estProfLoc_initPathMode; % cc 01/2026 PR3
 global g_estProfLoc_latThreshold ; % cc 01/2026 PR3
 
+global fig1  ; % cc 04/2026 add diag fig
+
 % define the sets of cycles to process
 pos = ones(size(a_floatData.positionQc));
 if (a_floatData.positionQc(end) == g_decArgo_qcInterpolated)
@@ -323,7 +325,7 @@ fig1=figure('Name', 'Initial Path', ...
 'Position', [1 screenSize(4)*(1/3) screenSize(3) screenSize(4)*(2/3)-90], ...
     'Color', 'w');
 useStereo = (max(a_floatData.latitude) >= g_estProfLoc_latThreshold) || (min(a_floatData.latitude) <= -g_estProfLoc_latThreshold);
-
+subplot(1,2,1) % cc 04/2026 add diag fig
 if useStereo
     latMax=max(a_floatData.latitude); latMin=min(a_floatData.latitude);
     m_proj('stereographic','lat',min((latMax+latMin)/2,90),'lon',max(mean(a_floatData.longitude),-180),'radius',min(latMax-latMin+20,30));
@@ -462,6 +464,7 @@ global g_estProfLoc_changeDepthConstraint; % cc 12/2025 PR3
 global g_estProfLoc_initPathMode; % cc 01/2026 PR3
 global g_estProfLoc_maxExtend; % cc 01/2026 PR3
 
+global fig1  ; % cc 04/2026 add diag fig
 
 % consider only data of the set
 cycleNumber = a_floatData.cycleNumber(a_idStart:a_idStop);
@@ -473,7 +476,7 @@ profPresMax = a_floatData.profPresMax(a_idStart:a_idStop);
 grounded = a_floatData.grounded(a_idStart:a_idStop);
 groundedPres = a_floatData.groundedPres(a_idStart:a_idStop);
 gebcoDepth = a_floatData.gebcoDepth(a_idStart:a_idStop);
-
+posqc = a_floatData.positionQc(a_idStart:a_idStop);  % cc 04/2026 add diag fig
 
 
 
@@ -501,6 +504,22 @@ if g_estProfLoc_changeDepthConstraint == 1
 end
 
 % ... cc 01/2026]
+
+
+% [cc 04/2026 ...>
+figure(fig1)
+subplot(1,2,1)
+
+subplot(1,2,2)
+hold on
+grid on
+grid minor
+set(gca,'Ydir','reverse')
+hd1=plot(cycleNumber,depthConstraint,'r*', 'LineWidth',2)
+hd1b=plot(cycleNumber(posqc==1),depthConstraint(posqc==1),'k^', 'LineWidth',2)
+hd2=plot(a_floatData.cycleNumber,a_floatData.profPresMax,'g-o' )
+hd3=plot(a_floatData.cycleNumber(a_floatData.grounded==1),a_floatData.profPresMax(a_floatData.grounded==1),'k.', 'MarkerSize', 10 )
+% ...cc 04/2026]
 
 o_floatData.setNumber(a_idStart:a_idStop) = a_setNum;
 o_floatData.depthConstraint(a_idStart:a_idStop) = depthConstraint;
@@ -936,6 +955,38 @@ if (done)
     %    fprintf('Press any key ...');
     %    pause
     %    fprintf('\n');
+
+    % [cc 04/2026 ...>
+    figure(fig1)
+    trajDepth = get_gebco_depth(trajLon, trajLat, a_gebcoFilePathName);
+
+    ax1=subplot(1,2,1,'Parent',fig1);
+    if useStereo
+        latMax=max(a_floatData.latitude); latMin=min(a_floatData.latitude);
+        m_proj('stereographic','lat',min((latMax+latMin)/2,90),'lon',max(mean(a_floatData.longitude),-180),'radius',min(latMax-latMin+20,30));
+        m_grid
+    else
+        latMax=max(a_floatData.latitude); latMin=min(a_floatData.latitude);
+        lonMax=max(a_floatData.longitude); lonMin=min(a_floatData.longitude);
+        m_proj('mercator', 'latitudes', [latMin latMax], 'longitudes', [lonMin lonMax]);
+        m_grid('box', 'fancy', 'tickdir', 'out', 'linestyle', 'none');
+    end
+
+    m1=m_plot(a_floatData.longitude,a_floatData.latitude,'m-.','LineWidth',2);
+    m2=m_plot(a_floatData.longitude(a_floatData.positionQc==1),a_floatData.latitude(a_floatData.positionQc==1),'*g');
+    m3=m_plot(trajLon,trajLat,'bo','LineWidth',2);
+    m_plot(trajLon,trajLat,'b-')
+    m4=m_plot(trajLon(grounded==1),trajLat(grounded==1),'.k','MarkerSize',10);
+    legend(ax1,[m1,m2,m3,m4],{'Initial Path';'POS_QC=1';'Estimated Traj';'Grounded'},'interpreter','none')
+
+     ax2=subplot(1,2,2,'Parent',fig1);
+    hd4=plot(cycleNumber ,trajDepth,'bo-','LineWidth',1,'MarkerSize',8)
+    box on
+    figure(fig1)
+    legend(ax2,[hd1,hd1b,hd2,hd3,hd4],{'Depth constraint';'Known depth(POS_QC=1)';'Prof Pres max';'Grounded';'Depth along estimated traj'},'Interpreter','none')
+    xlabel('Cycle Number')
+    title(['Float: ' num2str(a_floatNum)], 'FontSize', 14);
+    %....cc 04/2026]
 end
 
 % store output parameters
