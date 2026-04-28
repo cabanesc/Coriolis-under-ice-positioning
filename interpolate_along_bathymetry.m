@@ -22,8 +22,8 @@ function [lat_interp, lon_interp, depth_path] = interpolate_along_bathymetry(seg
 %   'method'           : 'isobath', 'adaptive_isobath' (default: 'isobath')
 %   'target_depth'     : Target depth in meters (default: mean depth)
 %   'depth_tolerance'  : Depth tolerance in meters (default: 200m)
-%   'n_waypoints'      : Number of waypoints (default: 20)
-%
+%   'n_waypoint'       : Number of waypoints (default: 20)
+%   'usegrounded'      : 0 if grounded are not used to determine initial path, 1 otherwise
 % OUTPUTS:
 %   lat_interp   : Interpolated latitudes
 %   lon_interp   : Interpolated longitudes
@@ -46,18 +46,18 @@ c=varargin(2:2:end);
 s = cell2struct(c,f,2);
 
 % default CONFIG
-params.method          = 'adaptive_isobath';
+%params.method          = 'adaptive_isobath';
 params.target_depth    = [];
 params.depth_tolerance = 50;
 params.n_waypoints     = 15;
 params.adaptation = 0;
-
+params.usegrounded = 0;
 % Input CONFIG
 if isfield(s,'method')==1;params.method=s.method;end;
 if isfield(s,'target_depth')==1;params.target_depth=s.target_depth;end;
 if isfield(s,'depth_tolerance')==1;params.depth_tolerance=s.depth_tolerance;end;
 if isfield(s,'n_waypoints')==1;params.n_waypoints=s.n_waypoints;end;
-
+if isfield(s,'usegrounded')==1;params.usegrounded=s.usegrounded;end;
 
 
 % Compute bathymetric grid
@@ -163,7 +163,7 @@ for target_dep = target_depths
     try
         % Extract contour
         %figure(2)
-       % C = contour(lon_fine, lat_fine, depth_fine, [target_dep target_dep]);
+        %C = contour(lon_fine, lat_fine, depth_fine, [target_dep target_dep]);
        C = contourc(lon_grid(1,:), lat_grid(:,1), depth_grid,  [target_dep target_dep]);
 
         if size(C, 2) < 3
@@ -317,9 +317,17 @@ current_lon = lon1;
 first_waypoints_lon = first_waypoints_lon([subseg_start(1) subseg_end]);
 first_waypoints_lat = first_waypoints_lat([subseg_start(1) subseg_end]);
 
+
 target_depth_segment=-segment_data.profPresMax(subseg_end);
 target_depth_segment(segment_data.grounded(subseg_end)==0) = NaN;
-target_depth_segment(end) = depth_end;
+if params.usegrounded==0  % do not use grounded depths (=> will interpolate instead)
+    target_depth_segment(segment_data.grounded(subseg_end)==1) = NaN;
+end
+if isnan(target_depth_segment(end))
+    target_depth_segment(end) = depth_end;
+end
+
+
 
 x = [segment_data.time(1) segment_data.time(subseg_end)];
 y = [depth_start target_depth_segment];
@@ -962,7 +970,7 @@ end
 
 
 function [subseg_start, subseg_end] = buildSubSegmentsFromIndMax(ind_max, nPoints, ProfPresMax, min_point)
-% Build sub-segments using ind_max as mandatory segment ends
+% Build sub-segments using ind_max as  segment ends
 %
 % INPUTS:
 %   ind_max    - indices defining the end of each segment
